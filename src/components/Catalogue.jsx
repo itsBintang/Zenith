@@ -30,7 +30,7 @@ function Catalogue() {
         <div className="ui-header__actions">
           <div className="ui-input ui-input--search">
             <input
-              placeholder="Search by AppID or name (separate multiple terms with comma)"
+              placeholder="Search by AppID, name, or Steam URL (e.g., https://store.steampowered.com/app/1086940/)"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && onSearch()}

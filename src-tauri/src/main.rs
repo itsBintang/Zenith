@@ -316,8 +316,19 @@ async fn search_games(query: String) -> Result<Vec<SearchResultItem>, String> {
 
     // Process each search term
     for term in search_terms {
+        // Check if it's a Steam URL and extract AppID
+        if let Some(app_id) = extract_appid_from_url(&term) {
+            println!("Detected Steam URL, extracted AppID: {}", app_id);
+            let name = fetch_game_name_simple(&app_id).await.unwrap_or_else(|| format!("Unknown Game ({})", app_id));
+            let header = header_image_for(&app_id);
+            all_results.push(SearchResultItem { 
+                app_id: app_id.clone(), 
+                name, 
+                header_image: header 
+            });
+        }
         // If numeric: treat as AppID direct
-        if term.chars().all(|c| c.is_ascii_digit()) {
+        else if term.chars().all(|c| c.is_ascii_digit()) {
             println!("Searching by AppID: {}", term);
             let name = fetch_game_name_simple(&term).await.unwrap_or_else(|| format!("Unknown Game ({})", term));
             let header = header_image_for(&term);
@@ -631,6 +642,90 @@ async fn get_library_games() -> Result<Vec<LibraryGame>, String> {
 
 fn header_image_for(app_id: &str) -> String {
     format!("https://cdn.cloudflare.steamstatic.com/steam/apps/{}/header.jpg", app_id)
+}
+
+// Helper function to extract AppID from Steam URLs
+fn extract_appid_from_url(input: &str) -> Option<String> {
+    // Support various Steam URL formats:
+    // https://store.steampowered.com/app/1086940/Baldurs_Gate_3/
+    // https://store.steampowered.com/app/1086940/
+    // store.steampowered.com/app/1086940/
+    // steam://store/1086940
+    // steamcommunity.com/app/1086940
+    
+    let input = input.trim();
+    
+    // Remove protocol if present
+    let url_part = if input.starts_with("http://") {
+        &input[7..]
+    } else if input.starts_with("https://") {
+        &input[8..]
+    } else if input.starts_with("steam://") {
+        &input[8..]
+    } else {
+        input
+    };
+    
+    // Steam store URL patterns
+    if url_part.contains("store.steampowered.com/app/") {
+        if let Some(start) = url_part.find("/app/") {
+            let after_app = &url_part[start + 5..]; // Skip "/app/"
+            if let Some(end) = after_app.find('/') {
+                let app_id = &after_app[..end];
+                if app_id.chars().all(|c| c.is_ascii_digit()) {
+                    return Some(app_id.to_string());
+                }
+            } else {
+                // No trailing slash, take everything after /app/
+                if after_app.chars().all(|c| c.is_ascii_digit()) {
+                    return Some(after_app.to_string());
+                }
+            }
+        }
+    }
+    
+    // Steam community URL patterns
+    if url_part.contains("steamcommunity.com/app/") {
+        if let Some(start) = url_part.find("/app/") {
+            let after_app = &url_part[start + 5..]; // Skip "/app/"
+            if let Some(end) = after_app.find('/') {
+                let app_id = &after_app[..end];
+                if app_id.chars().all(|c| c.is_ascii_digit()) {
+                    return Some(app_id.to_string());
+                }
+            } else {
+                if after_app.chars().all(|c| c.is_ascii_digit()) {
+                    return Some(after_app.to_string());
+                }
+            }
+        }
+    }
+    
+    // Steam protocol URL (steam://store/1086940)
+    if url_part.starts_with("store/") {
+        let after_store = &url_part[6..]; // Skip "store/"
+        if let Some(end) = after_store.find('/') {
+            let app_id = &after_store[..end];
+            if app_id.chars().all(|c| c.is_ascii_digit()) {
+                return Some(app_id.to_string());
+            }
+        } else {
+            if after_store.chars().all(|c| c.is_ascii_digit()) {
+                return Some(after_store.to_string());
+            }
+        }
+    }
+    
+    // Regex fallback for any URL containing /app/NUMBER pattern
+    if let Ok(re) = Regex::new(r"/app/(\d+)") {
+        if let Some(captures) = re.captures(input) {
+            if let Some(app_id) = captures.get(1) {
+                return Some(app_id.as_str().to_string());
+            }
+        }
+    }
+    
+    None
 }
 
 async fn fetch_game_name_simple(app_id: &str) -> Option<String> {
