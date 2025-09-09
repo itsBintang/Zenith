@@ -241,11 +241,12 @@ enum RepoType {
 async fn download_game(app_id: String, game_name: String) -> Result<DownloadResult, String> {
     println!("Starting seamless installation for AppID: {} ({})", app_id, game_name);
     
-    // Setup repositories to try (in priority order)
-    let mut repos = Vec::new();
-    repos.push(("https://furcate.eu/FILES/".to_string(), RepoType::DirectZip));
-    repos.push(("Fairyvmos/bruh-hub".to_string(), RepoType::Branch));
-    repos.push(("SteamAutoCracks/ManifestHub".to_string(), RepoType::Branch));
+   // Setup repositories to try (in priority order)
+let mut repos = Vec::new();
+repos.push(("https://furcate.eu/FILES/".to_string(), RepoType::DirectZip));
+repos.push(("itsBintang/ManifestHub".to_string(), RepoType::Branch)); // Your custom repo - Priority #1
+repos.push(("Fairyvmos/bruh-hub".to_string(), RepoType::Branch));
+repos.push(("SteamAutoCracks/ManifestHub".to_string(), RepoType::Branch));
     
     // Use global HTTP client
     
