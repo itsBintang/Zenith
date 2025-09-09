@@ -234,16 +234,18 @@ struct SearchAppsRawItem {
 enum RepoType {
     Branch,
     Decrypted,
+    DirectZip, // For direct ZIP file downloads like Furcate.eu
 }
 
 #[command]
 async fn download_game(app_id: String, game_name: String) -> Result<DownloadResult, String> {
     println!("Starting seamless installation for AppID: {} ({})", app_id, game_name);
     
-    // Setup repositories to try
-    let mut repos = HashMap::new();
-    repos.insert("Fairyvmos/bruh-hub".to_string(), RepoType::Branch);
-    repos.insert("SteamAutoCracks/ManifestHub".to_string(), RepoType::Branch);
+    // Setup repositories to try (in priority order)
+    let mut repos = Vec::new();
+    repos.push(("https://furcate.eu/FILES/".to_string(), RepoType::DirectZip));
+    repos.push(("Fairyvmos/bruh-hub".to_string(), RepoType::Branch));
+    repos.push(("SteamAutoCracks/ManifestHub".to_string(), RepoType::Branch));
     
     // Use global HTTP client
     
@@ -252,6 +254,41 @@ async fn download_game(app_id: String, game_name: String) -> Result<DownloadResu
         println!("Trying repository: {}", repo_name);
         
         match repo_type {
+            RepoType::DirectZip => {
+                let download_url = format!("{}{}.zip", repo_name, app_id);
+                println!("Downloading from: {}", download_url);
+                
+                match HTTP_CLIENT.get(&download_url)
+                    .timeout(std::time::Duration::from_secs(60))
+                    .send()
+                    .await {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            let bytes = response.bytes().await.map_err(|e| e.to_string())?;
+                            
+                            // Process ZIP in memory and install to Steam
+                            match process_and_install_to_steam(&bytes, &app_id, &game_name).await {
+                                Ok(install_info) => {
+                                    return Ok(DownloadResult {
+                                        success: true,
+                                        message: format!("Successfully installed {} to Steam! {}", game_name, install_info),
+                                        file_path: None, // No local file saved
+                                    });
+                                }
+                                Err(e) => {
+                                    println!("Failed to install to Steam: {}", e);
+                                    continue; // Try next repository
+                                }
+                            }
+                        } else {
+                            println!("Failed to download from {}: HTTP {}", repo_name, response.status());
+                        }
+                    }
+                    Err(e) => {
+                        println!("Error downloading from {}: {}", repo_name, e);
+                    }
+                }
+            }
             RepoType::Branch => {
                 let api_url = format!("https://api.github.com/repos/{}/zipball/{}", repo_name, app_id);
                 println!("Downloading from: {}", api_url);
@@ -326,7 +363,7 @@ async fn search_games(query: String) -> Result<Vec<SearchResultItem>, String> {
         if let Some(app_id) = extract_appid_from_url(&term) {
             println!("Detected Steam URL, extracted AppID: {}", app_id);
             let name = fetch_game_name_simple(&app_id).await.unwrap_or_else(|| format!("Unknown Game ({})", app_id));
-            let header = header_image_for(&app_id);
+        let header = header_image_for(&app_id);
             all_results.push(SearchResultItem { 
                 app_id: app_id.clone(), 
                 name, 
@@ -429,8 +466,8 @@ async fn search_steam_store(query: &str) -> Vec<SearchResultItem> {
         if resp.status().is_success() {
             if let Ok(raw) = resp.json::<Vec<SearchAppsRawItem>>().await {
                 for item in raw.into_iter().take(15) {
-                    if let (Some(id), Some(name)) = (item.appid, item.name) {
-                        let app_id = id.to_string();
+        if let (Some(id), Some(name)) = (item.appid, item.name) {
+            let app_id = id.to_string();
                         
                         // Apply same filtering
                         let name_lower = name.to_lowercase();
@@ -608,7 +645,7 @@ async fn get_library_games() -> Result<Vec<LibraryGame>, String> {
                 if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                     // Only process numeric app IDs (skip files like "Steamtools.lua")
                     if stem.chars().all(|c| c.is_ascii_digit()) {
-                        app_ids.push(stem.to_string());
+                    app_ids.push(stem.to_string());
                     } else {
                         println!("Skipping non-numeric app_id: {}", stem);
                     }
@@ -758,15 +795,15 @@ async fn fetch_game_name_simple(app_id: &str) -> Option<String> {
     
     let result = async {
         let resp = HTTP_CLIENT.get(url).send().await.ok()?;
-        if !resp.status().is_success() { return None; }
-        let v: serde_json::Value = resp.json().await.ok()?;
-        let data = v.get(app_id)?.get("data")?;
-        let name = data.get("name")?.as_str().map(|s| s.to_string())?;
-        
-        // Cache the result
-        GAME_CACHE.set_game_name(app_id.to_string(), name.clone());
-        
-        Some(name)
+    if !resp.status().is_success() { return None; }
+    let v: serde_json::Value = resp.json().await.ok()?;
+    let data = v.get(app_id)?.get("data")?;
+    let name = data.get("name")?.as_str().map(|s| s.to_string())?;
+    
+    // Cache the result
+    GAME_CACHE.set_game_name(app_id.to_string(), name.clone());
+    
+    Some(name)
     }.await;
     
     // Clean up the request lock
