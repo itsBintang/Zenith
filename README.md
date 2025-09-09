@@ -112,6 +112,3 @@ Production builds generate:
 - **State Management**: React hooks with Tauri commands
 - **Styling**: Modern CSS with gradients and animations
 
----
-
-Built with ❤️ using Tauri + React

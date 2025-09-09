@@ -490,3 +490,153 @@ button:focus-visible {
 .ui-spec-list strong {
   color: #e9eaee;
 }
+
+/* Steam Control Section */
+.ui-sidebar__steam-control {
+  margin-top: auto;
+  padding: 1rem;
+  border-top: 1px solid #2a2a2a;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.ui-btn--steam {
+  width: 100%;
+  background: linear-gradient(135deg, #1e40af, #3b82f6);
+  color: white;
+  border: none;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ui-btn--steam:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1d4ed8, #2563eb);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.ui-btn--steam:active {
+  transform: translateY(0);
+}
+
+.ui-btn--steam:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.ui-btn--steam.restarting {
+  background: linear-gradient(135deg, #059669, #10b981);
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Toast Notification Popup */
+.toast-notification-overlay {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  animation: slideInRight 0.3s ease-out;
+}
+
+.toast-notification {
+  background: rgba(26, 26, 26, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 8px;
+  border: 1px solid #333;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  min-width: 320px;
+  max-width: 400px;
+}
+
+.toast-content {
+  display: flex;
+  align-items: center;
+  padding: 1rem;
+  gap: 0.75rem;
+}
+
+.toast-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.toast-notification.success .toast-icon {
+  background: #4ade80;
+  color: #0f0f0f;
+}
+
+.toast-notification.error .toast-icon {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.toast-message {
+  flex: 1;
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.toast-notification.success .toast-message {
+  color: #4ade80;
+}
+
+.toast-notification.error .toast-message {
+  color: #fca5a5;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.toast-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}

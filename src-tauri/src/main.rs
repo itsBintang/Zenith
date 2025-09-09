@@ -15,6 +15,7 @@ use tempfile::TempDir;
 use zip::ZipArchive;
 use tokio::time::sleep;
 use futures::stream::{self, StreamExt};
+use std::process::Command;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct DownloadResult {
@@ -874,6 +875,167 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! Welcome to Zenith!", name)
 }
 
+// Helper function to find Steam executable path
+fn find_steam_executable_path() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use winreg::enums::*;
+        use winreg::RegKey;
+        
+        // Try to get Steam path from registry
+        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+        if let Ok(steam_key) = hklm.open_subkey("SOFTWARE\\WOW6432Node\\Valve\\Steam") {
+            if let Ok(install_path) = steam_key.get_value::<String, _>("InstallPath") {
+                let steam_exe = format!("{}\\steam.exe", install_path);
+                if std::path::Path::new(&steam_exe).exists() {
+                    return Ok(steam_exe);
+                }
+            }
+        }
+        
+        // Try 32-bit registry path
+        if let Ok(steam_key) = hklm.open_subkey("SOFTWARE\\Valve\\Steam") {
+            if let Ok(install_path) = steam_key.get_value::<String, _>("InstallPath") {
+                let steam_exe = format!("{}\\steam.exe", install_path);
+                if std::path::Path::new(&steam_exe).exists() {
+                    return Ok(steam_exe);
+                }
+            }
+        }
+        
+        // Fallback to common installation paths
+        let common_paths = vec![
+            "C:\\Program Files (x86)\\Steam\\steam.exe",
+            "C:\\Program Files\\Steam\\steam.exe",
+        ];
+        
+        for path in common_paths {
+            if std::path::Path::new(path).exists() {
+                return Ok(path.to_string());
+            }
+        }
+        
+        Err("Steam installation not found".to_string())
+    }
+    
+    #[cfg(not(target_os = "windows"))]
+    {
+        // For Linux/macOS, assume steam is in PATH
+        Ok("steam".to_string())
+    }
+}
+
+#[command]
+async fn restart_steam() -> Result<String, String> {
+    println!("Attempting to restart Steam...");
+    
+    #[cfg(target_os = "windows")]
+    {
+        // First, terminate the Steam process
+        let kill_result = Command::new("taskkill")
+            .args(&["/F", "/IM", "steam.exe"])
+            .output();
+            
+        match kill_result {
+            Ok(output) => {
+                if output.status.success() {
+                    println!("Steam process terminated successfully");
+                } else {
+                    println!("Steam process might not be running");
+                }
+            }
+            Err(e) => {
+                println!("Failed to terminate Steam: {}", e);
+            }
+        }
+        
+        // Wait a moment for the process to fully terminate
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        
+        // Find and restart Steam
+        match find_steam_executable_path() {
+            Ok(steam_path) => {
+                match Command::new(&steam_path).spawn() {
+                    Ok(_) => {
+                        println!("Steam restarted successfully");
+                        Ok("Steam has been restarted successfully".to_string())
+                    }
+                    Err(e) => {
+                        let error_msg = format!("Failed to restart Steam: {}", e);
+                        println!("{}", error_msg);
+                        Err(error_msg)
+                    }
+                }
+            }
+            Err(e) => {
+                let error_msg = format!("Steam executable not found: {}", e);
+                println!("{}", error_msg);
+                Err(error_msg)
+            }
+        }
+    }
+    
+    #[cfg(not(target_os = "windows"))]
+    {
+        // For Linux/macOS, try to restart Steam
+        match Command::new("pkill").arg("steam").output() {
+            Ok(_) => println!("Steam process terminated"),
+            Err(_) => println!("Steam might not be running"),
+        }
+        
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        
+        match Command::new("steam").spawn() {
+            Ok(_) => {
+                println!("Steam restarted successfully");
+                Ok("Steam has been restarted successfully".to_string())
+            }
+            Err(e) => {
+                let error_msg = format!("Failed to restart Steam: {}", e);
+                println!("{}", error_msg);
+                Err(error_msg)
+            }
+        }
+    }
+}
+
+#[command]
+async fn check_steam_status() -> Result<bool, String> {
+    #[cfg(target_os = "windows")]
+    {
+        match Command::new("tasklist")
+            .args(&["/FI", "IMAGENAME eq steam.exe"])
+            .output()
+        {
+            Ok(output) => {
+                let output_str = String::from_utf8_lossy(&output.stdout);
+                let is_running = output_str.contains("steam.exe");
+                println!("Steam status check: {}", if is_running { "Running" } else { "Not running" });
+                Ok(is_running)
+            }
+            Err(e) => {
+                println!("Failed to check Steam status: {}", e);
+                Err(format!("Failed to check Steam status: {}", e))
+            }
+        }
+    }
+    
+    #[cfg(not(target_os = "windows"))]
+    {
+        match Command::new("pgrep").arg("steam").output() {
+            Ok(output) => {
+                let is_running = !output.stdout.is_empty();
+                println!("Steam status check: {}", if is_running { "Running" } else { "Not running" });
+                Ok(is_running)
+            }
+            Err(e) => {
+                println!("Failed to check Steam status: {}", e);
+                Err(format!("Failed to check Steam status: {}", e))
+            }
+        }
+    }
+}
+
 #[command]
 async fn clear_cache() -> Result<String, String> {
     GAME_CACHE.cleanup_expired();
@@ -965,6 +1127,8 @@ fn main() {
             get_library_games,
             check_game_in_library,
             initialize_app,
+            restart_steam,
+            check_steam_status,
             clear_cache,
             remove_game
         ])
