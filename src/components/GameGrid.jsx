@@ -1,26 +1,63 @@
 import React from "react";
 
-const sample = new Array(8).fill(0).map((_, i) => ({
-  id: i + 1,
-  title: [
-    "Hollow Knight: Silksong",
-    "Red Dead Redemption 2",
-    "Ghost of Tsushima",
-    "Cyberpunk 2077",
-  ][i % 4],
-}));
+// Featured games with real AppIDs
+const featuredGames = [
+  
+  {
+    app_id: "1174180",
+    title: "Red Dead Redemption 2",
+    header_image: "https://cdn.akamai.steamstatic.com/steam/apps/1174180/header.jpg"
+  },
+  {
+    app_id: "2928600",
+    title: "Demon Slayer -Kimetsu no Yaiba- The Hinokami Chronicles 2",
+    header_image: "https://cdn.akamai.steamstatic.com/steam/apps/2928600/header.jpg"
+  },
+  {
+    app_id: "1091500",
+    title: "Cyberpunk 2077",
+    header_image: "https://cdn.akamai.steamstatic.com/steam/apps/1091500/header.jpg"
+  },
+  {
+    app_id: "2622380",
+    title: "ELDEN RING NIGHTREIGN",
+    header_image: "https://cdn.akamai.steamstatic.com/steam/apps/2622380/header.jpg"
+  },
+  {
+    app_id: "1245620",
+    title: "ELDEN RING",
+    header_image: "https://cdn.akamai.steamstatic.com/steam/apps/1245620/header.jpg"
+  },
+  {
+    app_id: "1172380",
+    title: "Star Wars Jedi: Fallen Order",
+    header_image: "https://cdn.akamai.steamstatic.com/steam/apps/1172380/header.jpg"
+  },
+];
 
-function GameGrid() {
+function GameGrid({ onGameSelect }) {
   return (
     <section className="ui-section">
       <div className="ui-section__row">
         <h3 className="ui-section-sub">Hot now</h3>
       </div>
       <div className="ui-grid">
-        {sample.map((g) => (
-          <div className="ui-card" key={g.id}>
-            <div className="ui-card__thumb" />
-            <div className="ui-card__title">{g.title}</div>
+        {featuredGames.map((game) => (
+          <div 
+            className="ui-card" 
+            key={game.app_id}
+            onClick={() => onGameSelect && onGameSelect(game.app_id)}
+            style={{ cursor: 'pointer' }}
+          >
+            <div 
+              className="ui-card__thumb" 
+              style={{ 
+                backgroundImage: `url(${game.header_image})`, 
+                backgroundSize: "cover", 
+                backgroundPosition: "center" 
+              }} 
+            />
+            <div className="ui-card__title">{game.title}</div>
           </div>
         ))}
       </div>

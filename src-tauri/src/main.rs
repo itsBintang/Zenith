@@ -684,7 +684,7 @@ async fn get_library_games() -> Result<Vec<LibraryGame>, String> {
 }
 
 fn header_image_for(app_id: &str) -> String {
-    format!("https://cdn.cloudflare.steamstatic.com/steam/apps/{}/header.jpg", app_id)
+    format!("https://cdn.akamai.steamstatic.com/steam/apps/{}/header.jpg", app_id)
 }
 
 // Helper function to extract AppID from Steam URLs
@@ -831,7 +831,8 @@ async fn get_game_details(app_id: String) -> Result<GameDetail, String> {
     let data = v.get(&app_id).and_then(|x| x.get("data")).ok_or("no data")?;
 
     let name = data.get("name").and_then(|x| x.as_str()).unwrap_or("").to_string();
-    let header_image = data.get("header_image").and_then(|x| x.as_str()).unwrap_or(&header_image_for(&app_id)).to_string();
+    // Always use our consistent header image format instead of Steam API's variable quality images
+    let header_image = header_image_for(&app_id);
     
     // Use background image for banner (higher resolution)
     let banner_image = data.get("background").and_then(|x| x.as_str())

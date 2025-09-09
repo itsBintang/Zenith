@@ -36,11 +36,21 @@ body { background: #0f0f10; }
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  height: 100vh;
+}
+
+.ui-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
 }
 
 .ui-content {
-  padding: 0;
+  padding: 16px;
   overflow: auto;
+  flex: 1;
+  height: 0; /* This allows flex child to shrink */
 }
 
 .logo {
@@ -278,6 +288,7 @@ button:focus-visible {
 }
 
 /* Featured */
+.ui-featured { margin-bottom: 24px; }
 .ui-section-title { color: #e9eaee; font-size: 18px; margin: 6px 0 10px; }
 .ui-hero { position: relative; border-radius: 12px; overflow: hidden; border: 1px solid #1f2023; background: #1b1c20; height: 260px; }
 .ui-hero__image { position: absolute; inset: 0; background: radial-gradient(1200px 300px at 40% 50%, #3b3c42, #1b1c20); opacity: .8; }
@@ -290,11 +301,12 @@ button:focus-visible {
 .ui-tab--active { background: #1f2024; color: #fff; }
 
 /* Grid */
-.ui-section { margin-top: 12px; }
+.ui-section { margin-top: 12px; margin-bottom: 32px; }
 .ui-section__row { display: flex; align-items: center; justify-content: space-between; margin: 10px 0; }
 .ui-section-sub { color: #ff8a65; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; }
 .ui-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.ui-card { background: #15161a; border: 1px solid #26272b; border-radius: 12px; overflow: hidden; }
+.ui-card { background: #15161a; border: 1px solid #26272b; border-radius: 12px; overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; }
+.ui-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); }
 .ui-card__thumb { height: 140px; background: linear-gradient(135deg, #2a2b30, #1b1c20); }
 .ui-card__title { padding: 10px 12px; color: #e5e7eb; font-weight: 600; }
 

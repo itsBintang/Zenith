@@ -1,24 +1,34 @@
 import React from "react";
 
-function FeaturedBanner() {
+function FeaturedBanner({ onGameSelect }) {
+  const featuredGame = {
+    app_id: "1030300",
+    title: "Hollow Knight: Silksong",
+    description: "Discover a vast, haunted kingdom in Hollow Knight: Silksong. Explore, fight and survive as you ascend to the peak of a land ruled by silk and song.",
+    banner_image: "https://cdn.akamai.steamstatic.com/steam/apps/1030300/library_hero.jpg"
+  };
+
   return (
     <section className="ui-featured">
-      <h2 className="ui-section-title">Featured</h2>
-      <div className="ui-hero">
-        <div className="ui-hero__image" />
+      <div 
+        className="ui-hero"
+        onClick={() => onGameSelect && onGameSelect(featuredGame.app_id)}
+        style={{ cursor: 'pointer' }}
+      >
+        <div 
+          className="ui-hero__image"
+          style={{
+            backgroundImage: `url(${featuredGame.banner_image})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center"
+          }}
+        />
         <div className="ui-hero__overlay">
-          <h3 className="ui-hero__title">Hollow Knight: Silksong</h3>
+          <h3 className="ui-hero__title">{featuredGame.title}</h3>
           <p className="ui-hero__desc">
-            Discover a vast, haunted kingdom in Hollow Knight: Silksong. Explore, fight and survive as you ascend to the
-            peak of a land ruled by silk and song.
+            {featuredGame.description}
           </p>
         </div>
-      </div>
-
-      <div className="ui-tabs">
-        <button className="ui-tab ui-tab--active">Hot now</button>
-        <button className="ui-tab">Top games of the week</button>
-        <button className="ui-tab">Games to beat</button>
       </div>
     </section>
   );

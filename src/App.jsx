@@ -111,7 +111,7 @@ function App() {
   let content;
   switch (route) {
     case 'home':
-      content = <Home />;
+      content = <Home onGameSelect={handleGameSelect} />;
       break;
     case 'catalogue':
       content = <Catalogue 
