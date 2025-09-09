@@ -2,21 +2,20 @@ import React, { useState } from "react";
 import { invoke } from "@tauri-apps/api/tauri";
 import { SearchResultsSkeleton } from "./SkeletonLoader";
 
-function Catalogue() {
-  const [query, setQuery] = useState("");
+function Catalogue({ onGameSelect, catalogueState, setCatalogueState }) {
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState([]);
   const [error, setError] = useState("");
-  const [hasSearched, setHasSearched] = useState(false);
+  
+  const { query, results, hasSearched } = catalogueState;
 
   const onSearch = async () => {
     if (!query.trim()) return;
     setLoading(true);
     setError("");
-    setHasSearched(true);
+    setCatalogueState(prev => ({ ...prev, hasSearched: true }));
     try {
       const res = await invoke("search_games", { query: query.trim() });
-      setResults(res || []);
+      setCatalogueState(prev => ({ ...prev, results: res || [] }));
     } catch (e) {
       setError(String(e));
     } finally {
@@ -35,11 +34,14 @@ function Catalogue() {
               placeholder="Search by AppID, name, or Steam URL"
               value={query}
               onChange={(e) => {
-                setQuery(e.target.value);
+                setCatalogueState(prev => ({ ...prev, query: e.target.value }));
                 // Reset search state when query is cleared
                 if (e.target.value.trim() === "") {
-                  setHasSearched(false);
-                  setResults([]);
+                  setCatalogueState(prev => ({ 
+                    ...prev, 
+                    hasSearched: false, 
+                    results: [] 
+                  }));
                 }
               }}
               onKeyDown={(e) => e.key === "Enter" && onSearch()}
@@ -72,7 +74,7 @@ function Catalogue() {
             
             <div className="ui-grid">
               {results.map((g) => (
-                <div className="ui-card" key={g.app_id} onClick={() => window.dispatchEvent(new CustomEvent('open-game-detail', { detail: { appId: g.app_id } }))} style={{ cursor: 'pointer' }}>
+                <div className="ui-card" key={g.app_id} onClick={() => onGameSelect && onGameSelect(g.app_id)} style={{ cursor: 'pointer' }}>
                   <div className="ui-card__thumb" style={{ backgroundImage: `url(${g.header_image})`, backgroundSize: "cover", backgroundPosition: "center" }} />
                   <div className="ui-card__title">{g.name}</div>
                   <div className="ui-card__appid">AppID: {g.app_id}</div>

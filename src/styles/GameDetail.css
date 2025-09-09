@@ -26,8 +26,6 @@
   max-width: 100%;
   height: 250px;
   min-height: 250px;
-  display: flex;
-  flex-direction: column;
   position: relative;
   transition: all ease 0.2s;
   overflow: hidden;
@@ -56,89 +54,7 @@
   z-index: 0;
 }
 
-.game-details__hero-backdrop {
-  flex: 1;
-  transition: opacity 0.2s ease;
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  z-index: 1;
-  opacity: 0.7;
-}
 
-.game-details__hero-logo-backdrop {
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(0deg, rgba(0, 0, 0, 0.8) 60%, transparent 100%);
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  z-index: 2;
-}
-
-.game-details__hero-content {
-  padding: 1rem;
-  height: 100%;
-  width: 100%;
-  max-width: 100%;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  box-sizing: border-box;
-}
-
-@media (min-width: 768px) {
-  .game-details__hero-content {
-    padding: 2rem;
-  }
-}
-
-.game-details__back-button {
-  position: absolute;
-  top: 1rem;
-  left: 1rem;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: white;
-  padding: 0.5rem;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.game-details__back-button:hover {
-  background: rgba(0, 0, 0, 0.8);
-  transform: translateY(-2px);
-}
-
-.game-details__game-logo {
-  font-size: 1.5rem;
-  font-weight: bold;
-  color: white;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
-  margin: 0;
-  align-self: flex-end;
-  max-width: 60%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-@media (min-width: 768px) {
-  .game-details__game-logo {
-    font-size: 2rem;
-    max-width: 70%;
-  }
-}
-
-@media (min-width: 1024px) {
-  .game-details__game-logo {
-    font-size: 2.5rem;
-    max-width: 80%;
-  }
-}
 
 .game-details__cloud-sync-button {
   padding: 0.75rem 1rem;

@@ -31,7 +31,7 @@ function ToastNotification({ message, type, onClose }) {
 }
 
 // HeroPanel component for actions and info
-function HeroPanel({ detail, onAddToLibrary, onRemoveFromLibrary, isDownloading, isInLibrary, onManageDlcs }) {
+function HeroPanel({ detail, onAddToLibrary, onRemoveFromLibrary, isDownloading, isInLibrary }) {
   const formatDate = (dateStr) => {
     if (!dateStr) return "N/A";
     const date = new Date(dateStr);
@@ -55,26 +55,14 @@ function HeroPanel({ detail, onAddToLibrary, onRemoveFromLibrary, isDownloading,
             {isDownloading ? "Installing..." : "Add to library"}
           </button>
         ) : (
-          <>
-            <button 
-              className="hero-button hero-button--danger" 
-              onClick={onRemoveFromLibrary}
-              disabled={isDownloading}
-            >
-              <FiTrash2 /> 
-              {isDownloading ? "Removing..." : "Remove from library"}
-            </button>
-            {detail.dlc && detail.dlc.length > 0 && (
-              <button 
-                className="hero-button hero-button--secondary" 
-                onClick={onManageDlcs}
-                disabled={isDownloading}
-              >
-                <FiPackage /> 
-                Manage DLCs ({detail.dlc.length})
-              </button>
-            )}
-          </>
+          <button 
+            className="hero-button hero-button--danger" 
+            onClick={onRemoveFromLibrary}
+            disabled={isDownloading}
+          >
+            <FiTrash2 /> 
+            {isDownloading ? "Removing..." : "Remove from library"}
+          </button>
         )}
       </div>
     </div>
@@ -148,7 +136,7 @@ function GallerySlider({ screenshots }) {
   );
 }
 
-function GameDetail({ appId, onBack }) {
+function GameDetail({ appId, onBack, showBackButton = true }) {
   const [detail, setDetail] = useState(null);
   const [activeTab, setActiveTab] = useState("minimum");
   const [gameColor, setGameColor] = useState("#1a1a1a");
@@ -288,6 +276,16 @@ function GameDetail({ appId, onBack }) {
         />
       )}
       <section className="game-details__container">
+        {/* Navigation Bar */}
+        <div className="game-details__navbar">
+          {showBackButton && (
+            <button onClick={onBack} className="game-details__back-button">
+              <FiArrowLeft size={24} />
+            </button>
+          )}
+          <h1 className="game-details__title">{detail.name}</h1>
+        </div>
+
         {/* Hero Section */}
         <div className="game-details__hero">
           <img
@@ -295,23 +293,24 @@ function GameDetail({ appId, onBack }) {
             className="game-details__hero-image"
             alt={detail.name}
           />
-          <div
-            className="game-details__hero-backdrop"
-            style={{ backgroundColor: gameColor }}
-          />
           
-          <div className="game-details__hero-logo-backdrop">
-            <div className="game-details__hero-content">
-              <button onClick={onBack} className="game-details__back-button">
-                <FiArrowLeft size={24} />
-              </button>
-              
-              <h1 className="game-details__game-logo">{detail.name}</h1>
-              
+          <div className="game-details__hero-controls">
+            <div className="game-details__action-buttons">
               <button className="game-details__cloud-sync-button">
                 <FiCloud />
                 Cloud save
               </button>
+              
+              {isInLibrary && (
+                <button 
+                  className="game-details__dlc-button"
+                  onClick={handleManageDlcs}
+                  disabled={isDownloading}
+                >
+                  <FiPackage />
+                  DLC Unlocker
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -323,20 +322,11 @@ function GameDetail({ appId, onBack }) {
           onRemoveFromLibrary={handleRemoveFromLibrary}
           isDownloading={isDownloading}
           isInLibrary={isInLibrary}
-          onManageDlcs={handleManageDlcs}
         />
 
         {/* Main Content */}
         <div className="game-details__description-container">
           <div className="game-details__description-content">
-            {/* Header info */}
-            <div className="description-header">
-              <div className="description-header__row">
-                <span>Released on {detail.release_date || "N/A"}</span>
-                <span className="description-header__separator">•</span>
-                <span>Published by {detail.publisher || "Unknown"}</span>
-              </div>
-            </div>
 
             {/* Gallery */}
             <GallerySlider screenshots={detail.screenshots} />

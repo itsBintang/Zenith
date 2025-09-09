@@ -673,3 +673,111 @@ button:focus-visible {
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(75, 85, 99, 0.4);
 }
+
+/* Game Details Navbar */
+.game-details__navbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 2rem;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.game-details__title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+  flex: 1;
+}
+
+.game-details__back-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0.5rem;
+}
+
+.game-details__back-button:hover {
+  color: #ccc;
+  transform: translateX(-2px);
+}
+
+/* Game Details Hero Controls */
+.game-details__hero-controls {
+  position: absolute;
+  bottom: 2rem;
+  right: 2rem;
+  z-index: 10;
+}
+
+/* Game Details Action Buttons */
+.game-details__action-buttons {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.game-details__dlc-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  backdrop-filter: blur(10px);
+}
+
+.game-details__dlc-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.35);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+.game-details__dlc-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.game-details__cloud-sync-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(10px);
+}
+
+.game-details__cloud-sync-button:hover {
+  background: rgba(255, 255, 255, 0.35);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-1px);
+}

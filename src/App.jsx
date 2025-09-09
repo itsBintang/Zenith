@@ -10,6 +10,12 @@ import "./App.css";
 function App() {
   const [route, setRoute] = React.useState("home");
   const [activeAppId, setActiveAppId] = React.useState(null);
+  const [fromLibrary, setFromLibrary] = React.useState(false);
+  const [catalogueState, setCatalogueState] = React.useState({
+    query: "",
+    results: [],
+    hasSearched: false
+  });
   const [isLoading, setIsLoading] = React.useState(true);
   const [loadingProgress, setLoadingProgress] = React.useState(0);
   const [loadingStep, setLoadingStep] = React.useState("Initializing Zenith...");
@@ -63,6 +69,7 @@ function App() {
       const { appId } = e.detail || {};
       if (appId) {
         setActiveAppId(appId);
+        setFromLibrary(false); // Reset when coming from event
         setRoute("detail");
       }
     };
@@ -70,8 +77,22 @@ function App() {
     return () => window.removeEventListener('open-game-detail', handler);
   }, []);
 
+  // Reset fromLibrary when navigating away from detail
+  React.useEffect(() => {
+    if (route !== 'detail') {
+      setFromLibrary(false);
+    }
+  }, [route]);
+
   const handleGameSelect = (appId) => {
     setActiveAppId(appId);
+    setFromLibrary(false);
+    setRoute("detail");
+  };
+
+  const handleLibraryGameSelect = (appId) => {
+    setActiveAppId(appId);
+    setFromLibrary(true);
     setRoute("detail");
   };
 
@@ -93,10 +114,18 @@ function App() {
       content = <Home />;
       break;
     case 'catalogue':
-      content = <Catalogue onGameSelect={handleGameSelect} />;
+      content = <Catalogue 
+        onGameSelect={handleGameSelect} 
+        catalogueState={catalogueState}
+        setCatalogueState={setCatalogueState}
+      />;
       break;
     case 'detail':
-      content = <GameDetail appId={activeAppId} onBack={() => setRoute('catalogue')} />;
+      content = <GameDetail 
+        appId={activeAppId} 
+        onBack={() => setRoute('catalogue')} 
+        showBackButton={!fromLibrary}
+      />;
       break;
     default:
       content = <Home />;
@@ -107,7 +136,7 @@ function App() {
       <Sidebar 
         active={route} 
         onNavigate={setRoute} 
-        onGameSelect={handleGameSelect} 
+        onGameSelect={handleLibraryGameSelect} 
       />
       <main className="ui-main">
         {content}

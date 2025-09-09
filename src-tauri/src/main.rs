@@ -78,8 +78,13 @@ impl GameCache {
     
     fn set_game_details(&self, app_id: String, details: GameDetail) {
         let mut cache = self.game_details.lock().unwrap();
+        let dlc_count = details.dlc.len();
         cache.insert(app_id.clone(), CacheEntry::new(details, 86400)); // 1 day TTL
-        println!("Cached game details for: {}", app_id);
+        if dlc_count > 0 {
+            println!("Cached game details for: {} (with {} DLCs)", app_id, dlc_count);
+        } else {
+            println!("Cached game details for: {} (DLC lazy-loaded)", app_id);
+        }
     }
     
     async fn get_game_name(&self, app_id: &str) -> Option<String> {
@@ -835,26 +840,8 @@ async fn get_game_details(app_id: String) -> Result<GameDetail, String> {
         }
     }
 
-    // Extract DLC information
-    let dlc = if let Some(dlc_data) = data.get("dlc") {
-        match dlc_data {
-            serde_json::Value::Array(arr) => {
-                arr.iter()
-                    .filter_map(|v| v.as_u64())
-                    .map(|id| id.to_string())
-                    .collect()
-            }
-            serde_json::Value::Object(obj) => {
-                obj.values()
-                    .filter_map(|v| v.as_u64())
-                    .map(|id| id.to_string())
-                    .collect()
-            }
-            _ => Vec::new(),
-        }
-    } else {
-        Vec::new()
-    };
+    // DLC will be loaded separately when needed (lazy loading)
+    let dlc = Vec::new();
 
     let game_detail = GameDetail {
         app_id: app_id.clone(),
@@ -1273,14 +1260,81 @@ async fn check_steam_status() -> Result<bool, String> {
 }
 
 #[command]
+async fn get_game_dlc_list(app_id: String) -> Result<Vec<String>, String> {
+    println!("Fetching DLC list for game: {}", app_id);
+    
+    // Check if we have cached game details with DLC
+    if let Some(cached_details) = GAME_CACHE.get_game_details(&app_id).await {
+        if !cached_details.dlc.is_empty() {
+            println!("Found {} cached DLCs for game {}", cached_details.dlc.len(), app_id);
+            return Ok(cached_details.dlc);
+        }
+    }
+    
+    // Fetch DLC data from Steam API
+    let url = format!("https://store.steampowered.com/api/appdetails?appids={}", app_id);
+    println!("Fetching DLC data from Steam API for: {}", app_id);
+    
+    let resp = HTTP_CLIENT.get(&url).send().await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() { 
+        return Err(format!("Steam API returned status {}", resp.status())); 
+    }
+    
+    let v: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let data = v.get(&app_id).and_then(|x| x.get("data")).ok_or("no data")?;
+
+    // Extract DLC information
+    let dlc = if let Some(dlc_data) = data.get("dlc") {
+        match dlc_data {
+            serde_json::Value::Array(arr) => {
+                arr.iter()
+                    .filter_map(|v| v.as_u64())
+                    .map(|id| id.to_string())
+                    .collect()
+            }
+            serde_json::Value::Object(obj) => {
+                obj.values()
+                    .filter_map(|v| v.as_u64())
+                    .map(|id| id.to_string())
+                    .collect()
+            }
+            _ => Vec::new(),
+        }
+    } else {
+        Vec::new()
+    };
+
+    if !dlc.is_empty() {
+        println!("Found {} DLCs for game {}", dlc.len(), app_id);
+        
+        // Update cached game details with DLC info
+        if let Some(mut cached_details) = GAME_CACHE.get_game_details(&app_id).await {
+            cached_details.dlc = dlc.clone();
+            GAME_CACHE.set_game_details(app_id.clone(), cached_details);
+        }
+    }
+
+    Ok(dlc)
+}
+
+#[command]
 async fn get_batch_game_details(app_ids: Vec<String>) -> Result<Vec<GameDetail>, String> {
+    println!("Fetching batch details for {} DLCs", app_ids.len());
     let mut details_list = Vec::new();
+    let mut cache_hits = 0;
+    let mut api_calls = 0;
     
     // Process in smaller batches to avoid overwhelming the API
     for chunk in app_ids.chunks(5) {
         let mut batch_futures = Vec::new();
         
         for app_id in chunk {
+            // Check cache first to count hits
+            if GAME_CACHE.get_game_details(app_id).await.is_some() {
+                cache_hits += 1;
+            } else {
+                api_calls += 1;
+            }
             batch_futures.push(get_game_details(app_id.clone()));
         }
         
@@ -1294,10 +1348,12 @@ async fn get_batch_game_details(app_ids: Vec<String>) -> Result<Vec<GameDetail>,
         
         // Small delay between batches
         if details_list.len() < app_ids.len() {
-            tokio::time::sleep(Duration::from_millis(500)).await;
+            tokio::time::sleep(Duration::from_millis(300)).await;
         }
     }
     
+    println!("Batch DLC fetch completed: {} cache hits, {} API calls, {} total results", 
+             cache_hits, api_calls, details_list.len());
     Ok(details_list)
 }
 
@@ -1325,7 +1381,7 @@ async fn get_dlcs_in_lua(app_id: String) -> Result<Vec<String>, String> {
 }
 
 #[command]
-async fn sync_dlcs_in_lua(main_app_id: String, dlc_ids_to_set: Vec<String>) -> Result<String, String> {
+async fn sync_dlcs_in_lua(main_app_id: String, dlc_ids_to_set: Vec<String>, added_count: Option<usize>, removed_count: Option<usize>) -> Result<String, String> {
     let steam_config_path = find_steam_config_path().map_err(|e| e.to_string())?;
     let stplugin_dir = steam_config_path.join("stplug-in");
     let lua_file_path = stplugin_dir.join(format!("{}.lua", main_app_id));
@@ -1383,8 +1439,17 @@ async fn sync_dlcs_in_lua(main_app_id: String, dlc_ids_to_set: Vec<String>) -> R
     // Write back to file
     fs::write(&lua_file_path, new_content).map_err(|e| e.to_string())?;
 
-    println!("Successfully synced {} DLC(s) for game {}", dlc_ids_to_set.len(), main_app_id);
-    Ok(format!("Successfully synced {} DLC(s)", dlc_ids_to_set.len()))
+    // Generate appropriate message based on actions
+    let message = match (added_count.unwrap_or(0), removed_count.unwrap_or(0)) {
+        (0, 0) => "No changes made to DLCs".to_string(),
+        (added, 0) if added > 0 => format!("Successfully unlocked {} DLC{}", added, if added == 1 { "" } else { "s" }),
+        (0, removed) if removed > 0 => format!("Successfully removed {} DLC{}", removed, if removed == 1 { "" } else { "s" }),
+        (added, removed) => format!("Successfully unlocked {} and removed {} DLC{}", 
+                                   added, removed, if added + removed == 1 { "" } else { "s" }),
+    };
+    
+    println!("DLC sync completed for game {}: {}", main_app_id, message);
+    Ok(message)
 }
 
 #[command]
@@ -1480,6 +1545,7 @@ fn main() {
             initialize_app,
             restart_steam,
             check_steam_status,
+            get_game_dlc_list,
             get_batch_game_details,
             get_dlcs_in_lua,
             sync_dlcs_in_lua,

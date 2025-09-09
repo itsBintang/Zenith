@@ -20,8 +20,8 @@ function DlcManager({ game, onClose, showNotification }) {
       setIsLoading(true);
       setError(null);
       try {
-        // Get all DLC AppIDs from game details
-        const allIds = game.dlc || [];
+        // Get all DLC AppIDs using dedicated command
+        const allIds = await invoke('get_game_dlc_list', { appId: game.app_id });
 
         if (allIds.length === 0) {
           setError('This game has no available DLCs.');
@@ -43,7 +43,7 @@ function DlcManager({ game, onClose, showNotification }) {
     };
 
     fetchInitialDlcData();
-  }, [game.app_id, game.dlc]);
+  }, [game.app_id]);
 
   // Fetch DLC details for current page
   useEffect(() => {
@@ -91,15 +91,49 @@ function DlcManager({ game, onClose, showNotification }) {
     setIsSaving(true);
     
     try {
+      // Calculate what's being added/removed
+      const previouslyInstalled = Array.from(installedDlcs);
+      const newSelection = Array.from(selectedDlcs);
+      
+      const addedDlcs = newSelection.filter(id => !installedDlcs.has(id));
+      const removedDlcs = previouslyInstalled.filter(id => !selectedDlcs.has(id));
+      
       const result = await invoke('sync_dlcs_in_lua', {
         mainAppId: game.app_id,
-        dlcIdsToSet: Array.from(selectedDlcs),
+        dlcIdsToSet: newSelection,
+        addedCount: addedDlcs.length,
+        removedCount: removedDlcs.length,
       });
+      
       showNotification(result, 'success');
       setInstalledDlcs(new Set(selectedDlcs)); // Update installed state
       onClose();
     } catch (err) {
       showNotification(`Error saving DLCs: ${err.toString()}`, 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRemoveAll = async () => {
+    setIsSaving(true);
+    
+    try {
+      const removedCount = installedDlcs.size;
+      
+      const result = await invoke('sync_dlcs_in_lua', {
+        mainAppId: game.app_id,
+        dlcIdsToSet: [],
+        addedCount: 0,
+        removedCount: removedCount,
+      });
+      
+      showNotification(result, 'success');
+      setInstalledDlcs(new Set()); // Clear installed state
+      setSelectedDlcs(new Set()); // Clear selection
+      onClose();
+    } catch (err) {
+      showNotification(`Error removing DLCs: ${err.toString()}`, 'error');
     } finally {
       setIsSaving(false);
     }
@@ -119,7 +153,7 @@ function DlcManager({ game, onClose, showNotification }) {
       <div className="dlc-manager-modal">
         {/* Header */}
         <div className="dlc-manager-header">
-          <h2>Manage DLCs for {game.name}</h2>
+          <h2>DLC Unlocker</h2>
           <button onClick={onClose} className="dlc-close-btn">
             <FiX size={24} />
           </button>
@@ -141,59 +175,94 @@ function DlcManager({ game, onClose, showNotification }) {
           )}
 
           {!isLoading && !error && allDlcAppIds.length > 0 && (
-            <div className="dlc-list">
-              {dlcs.map(dlc => {
-                const dlcIdStr = dlc.app_id;
-                const isSelected = selectedDlcs.has(dlcIdStr);
-                const wasInstalled = installedDlcs.has(dlcIdStr);
+            <>
+              {/* Action Buttons */}
+              <div className="dlc-actions-bar">
+                <button 
+                  className="dlc-action-btn"
+                  onClick={() => {
+                    const allIds = new Set(allDlcAppIds);
+                    setSelectedDlcs(allIds);
+                  }}
+                >
+                  Select All
+                </button>
+                <button 
+                  className="dlc-action-btn"
+                  onClick={() => setSelectedDlcs(new Set())}
+                >
+                  Select None
+                </button>
+                <button 
+                  className="dlc-action-btn dlc-action-btn--primary"
+                  onClick={handleSaveChanges}
+                  disabled={isSaving || !hasChanges}
+                >
+                  {isSaving ? 'Saving...' : 'Unlock Selected'}
+                </button>
+                <button 
+                  className="dlc-action-btn dlc-action-btn--danger"
+                  onClick={handleRemoveAll}
+                  disabled={isSaving || selectedDlcs.size === 0}
+                >
+                  Remove Selected
+                </button>
+              </div>
 
-                return (
-                  <div key={dlc.app_id} className="dlc-item">
-                    <div className="dlc-info">
-                      <img 
-                        src={dlc.header_image} 
-                        alt={dlc.name}
-                        className="dlc-image"
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                        }}
-                      />
-                      <div className="dlc-details">
-                        <h3 className="dlc-name">{dlc.name}</h3>
-                        <p className="dlc-appid">AppID: {dlc.app_id}</p>
-                        {dlc.release_date && (
-                          <p className="dlc-release">Released: {dlc.release_date}</p>
+              {/* DLC Grid */}
+              <div className="dlc-grid">
+                {dlcs.map(dlc => {
+                  const dlcIdStr = dlc.app_id;
+                  const isSelected = selectedDlcs.has(dlcIdStr);
+                  const wasInstalled = installedDlcs.has(dlcIdStr);
+
+                  return (
+                    <div 
+                      key={dlc.app_id} 
+                      className={`dlc-card ${isSelected ? 'selected' : ''}`}
+                      onClick={() => handleToggleDlc(dlc.app_id)}
+                    >
+                      {/* Selection Indicator */}
+                      <div className="dlc-selection-indicator">
+                        {isSelected ? <FiCheck size={16} /> : <div className="selection-circle" />}
+                      </div>
+
+                      {/* DLC Image */}
+                      <div className="dlc-card-image">
+                        <img 
+                          src={dlc.header_image} 
+                          alt={dlc.name}
+                          onError={(e) => {
+                            e.target.src = `https://cdn.cloudflare.steamstatic.com/steam/apps/${dlc.app_id}/header.jpg`;
+                          }}
+                        />
+                        {/* Lock overlay for unselected items */}
+                        {!isSelected && (
+                          <div className="dlc-lock-overlay">
+                            <div className="lock-icon">🔒</div>
+                          </div>
                         )}
                       </div>
-                    </div>
-                    <div className="dlc-actions">
-                      <button
-                        onClick={() => handleToggleDlc(dlc.app_id)}
-                        className={`dlc-toggle-btn ${isSelected ? 'selected' : 'unselected'}`}
-                      >
-                        {isSelected ? (
-                          <>
-                            <FiCheck size={16} />
-                            <span>Added</span>
-                          </>
-                        ) : (
-                          <>
-                            <FiPlus size={16} />
-                            <span>Add</span>
-                          </>
-                        )}
-                      </button>
+
+                      {/* DLC Info */}
+                      <div className="dlc-card-info">
+                        <h3 className="dlc-card-title">{dlc.name}</h3>
+                        <p className="dlc-card-id">ID: {dlc.app_id}</p>
+                        <p className="dlc-card-size">0 B Size</p>
+                      </div>
+
+                      {/* Status Badge */}
                       {wasInstalled && !isSelected && (
-                        <span className="dlc-status-badge removing">Removing</span>
+                        <div className="dlc-status-badge removing">Removing</div>
                       )}
                       {!wasInstalled && isSelected && (
-                        <span className="dlc-status-badge adding">Adding</span>
+                        <div className="dlc-status-badge adding">Adding</div>
                       )}
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
 
@@ -222,29 +291,6 @@ function DlcManager({ game, onClose, showNotification }) {
           </div>
         )}
 
-        {/* Footer */}
-        <div className="dlc-manager-footer">
-          <div className="dlc-summary">
-            {allDlcAppIds.length > 0 && (
-              <span>
-                {selectedDlcs.size} of {allDlcAppIds.length} DLCs selected
-              </span>
-            )}
-          </div>
-          <div className="dlc-actions">
-            <button onClick={onClose} className="dlc-btn dlc-btn--secondary">
-              Cancel
-            </button>
-            <button 
-              onClick={handleSaveChanges} 
-              disabled={isSaving || !hasChanges || isLoading}
-              className="dlc-btn dlc-btn--primary"
-            >
-              {isSaving && <FiLoader className="spinning" size={16} />}
-              {isSaving ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );
