@@ -297,36 +297,154 @@ async fn download_game(app_id: String, game_name: String) -> Result<DownloadResu
 
 #[command]
 async fn search_games(query: String) -> Result<Vec<SearchResultItem>, String> {
-    // If numeric: treat as AppID direct
-    if query.chars().all(|c| c.is_ascii_digit()) {
-        let app_id = query.clone();
-        let name = fetch_game_name_simple(&app_id).await.unwrap_or_else(|| "Unknown".to_string());
-        let header = header_image_for(&app_id);
-        return Ok(vec![SearchResultItem { app_id, name, header_image: header }]);
+    let query = query.trim();
+    if query.is_empty() {
+        return Ok(vec![]);
     }
 
-    // Name search via Steam community actions
-    let encoded = query.replace(' ', "%20");
-    let url = format!("https://steamcommunity.com/actions/SearchApps/{}", encoded);
-    let resp = HTTP_CLIENT
-        .get(url)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    println!("Searching for: '{}'", query);
 
-    if !resp.status().is_success() {
-        return Err(format!("Search request failed with status {}", resp.status()));
-    }
+    // Split query into search terms (support comma-separated)
+    let search_terms: Vec<String> = query
+        .split(',')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .collect();
 
-    let raw: Vec<SearchAppsRawItem> = resp.json().await.map_err(|e| e.to_string())?;
-    let mut out = Vec::new();
-    for item in raw.into_iter().take(30) {
-        if let (Some(id), Some(name)) = (item.appid, item.name) {
-            let app_id = id.to_string();
-            out.push(SearchResultItem { app_id: app_id.clone(), name, header_image: header_image_for(&app_id) });
+    let mut all_results = Vec::new();
+
+    // Process each search term
+    for term in search_terms {
+        // If numeric: treat as AppID direct
+        if term.chars().all(|c| c.is_ascii_digit()) {
+            println!("Searching by AppID: {}", term);
+            let name = fetch_game_name_simple(&term).await.unwrap_or_else(|| format!("Unknown Game ({})", term));
+            let header = header_image_for(&term);
+            all_results.push(SearchResultItem { 
+                app_id: term.clone(), 
+                name, 
+                header_image: header 
+            });
+        } else {
+            // Name search via Steam Store API (more reliable than community search)
+            println!("Searching by name: {}", term);
+            
+            // Try multiple search approaches
+            let search_results = search_steam_store(&term).await;
+            all_results.extend(search_results);
         }
     }
-    Ok(out)
+
+    // Remove duplicates based on app_id
+    let mut seen = std::collections::HashSet::new();
+    let unique_results: Vec<SearchResultItem> = all_results
+        .into_iter()
+        .filter(|item| seen.insert(item.app_id.clone()))
+        .take(50) // Limit total results
+        .collect();
+
+    println!("Found {} unique results", unique_results.len());
+    Ok(unique_results)
+}
+
+// Helper function to search Steam store
+async fn search_steam_store(query: &str) -> Vec<SearchResultItem> {
+    let mut results = Vec::new();
+    
+    // Method 1: Try Steam Store search API
+    let encoded_query = query.replace(' ', "+");
+    let store_search_url = format!(
+        "https://store.steampowered.com/api/storesearch/?term={}&l=english&cc=US",
+        encoded_query
+    );
+    
+    println!("Trying Steam Store API: {}", store_search_url);
+    
+    if let Ok(resp) = HTTP_CLIENT.get(&store_search_url).send().await {
+        if resp.status().is_success() {
+            if let Ok(json_value) = resp.json::<serde_json::Value>().await {
+                if let Some(items) = json_value.get("items").and_then(|v| v.as_array()) {
+                    for item in items.iter().take(20) {
+                        if let (Some(id), Some(name)) = (
+                            item.get("id").and_then(|v| v.as_u64()),
+                            item.get("name").and_then(|v| v.as_str())
+                        ) {
+                            let app_id = id.to_string();
+                            
+                            // Filter out non-games unless explicitly searched for
+                            let name_lower = name.to_lowercase();
+                            let query_lower = query.to_lowercase();
+                            
+                            let is_non_game = [
+                                "dlc", "soundtrack", "demo", "pack", "sdk", "artbook", 
+                                "trailer", "movie", "beta", "ost", "wallpaper", "season pass",
+                                "bonus content", "pre-purchase", "pre-order", "expansion"
+                            ].iter().any(|&keyword| name_lower.contains(keyword));
+
+                            let searching_for_non_game = [
+                                "dlc", "soundtrack", "demo", "pack", "artbook", "trailer", 
+                                "movie", "beta", "pass", "expansion"
+                            ].iter().any(|&keyword| query_lower.contains(keyword));
+
+                            if !is_non_game || searching_for_non_game {
+                                results.push(SearchResultItem {
+                                    app_id: app_id.clone(),
+                                    name: name.to_string(),
+                                    header_image: header_image_for(&app_id),
+                                });
+                            }
+                        }
+                    }
+                    println!("Found {} results from Steam Store API", results.len());
+                    return results;
+                }
+            }
+        }
+    }
+    
+    // Method 2: Fallback to community search if store search fails
+    println!("Store search failed, trying community search");
+    let encoded = query.replace(' ', "%20");
+    let community_url = format!("https://steamcommunity.com/actions/SearchApps/{}", encoded);
+    
+    if let Ok(resp) = HTTP_CLIENT.get(&community_url).send().await {
+        if resp.status().is_success() {
+            if let Ok(raw) = resp.json::<Vec<SearchAppsRawItem>>().await {
+                for item in raw.into_iter().take(15) {
+                    if let (Some(id), Some(name)) = (item.appid, item.name) {
+                        let app_id = id.to_string();
+                        
+                        // Apply same filtering
+                        let name_lower = name.to_lowercase();
+                        let query_lower = query.to_lowercase();
+                        
+                        let is_non_game = [
+                            "dlc", "soundtrack", "demo", "pack", "sdk", "artbook", 
+                            "trailer", "movie", "beta", "ost", "wallpaper", "season pass",
+                            "bonus content", "pre-purchase", "pre-order"
+                        ].iter().any(|&keyword| name_lower.contains(keyword));
+
+                        let searching_for_non_game = [
+                            "dlc", "soundtrack", "demo", "pack", "artbook", "trailer", 
+                            "movie", "beta", "pass"
+                        ].iter().any(|&keyword| query_lower.contains(keyword));
+
+                        if !is_non_game || searching_for_non_game {
+                            results.push(SearchResultItem {
+                                app_id: app_id.clone(),
+                                name,
+                                header_image: header_image_for(&app_id),
+                            });
+                        }
+                    }
+                }
+                println!("Found {} results from community search", results.len());
+            }
+        }
+    }
+    
+    results
 }
 
 #[derive(Debug, Serialize, Deserialize)]

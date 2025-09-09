@@ -22,14 +22,6 @@ function Catalogue() {
     }
   };
 
-  const onDownload = async (item) => {
-    try {
-      await invoke("download_game", { appId: item.app_id, gameName: item.name });
-      alert(`Started installing ${item.name}`);
-    } catch (e) {
-      alert(`Failed: ${e}`);
-    }
-  };
 
   return (
     <div className="ui-page">
@@ -38,7 +30,7 @@ function Catalogue() {
         <div className="ui-header__actions">
           <div className="ui-input ui-input--search">
             <input
-              placeholder="Search by AppID or name"
+              placeholder="Search by AppID or name (separate multiple terms with comma)"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && onSearch()}
@@ -55,18 +47,30 @@ function Catalogue() {
         
         {loading && <SearchResultsSkeleton />}
         
-        {!loading && (
-          <div className="ui-grid">
-            {results.map((g) => (
-              <div className="ui-card" key={g.app_id} onClick={() => window.dispatchEvent(new CustomEvent('open-game-detail', { detail: { appId: g.app_id } }))} style={{ cursor: 'pointer' }}>
-                <div className="ui-card__thumb" style={{ backgroundImage: `url(${g.header_image})`, backgroundSize: "cover", backgroundPosition: "center" }} />
-                <div className="ui-card__title">{g.name}</div>
-                <div style={{ padding: 12 }}>
-                  <button className="ui-btn" onClick={() => onDownload(g)}>Install</button>
-                </div>
+        {!loading && !error && (
+          <>
+            {results.length > 0 && (
+              <div className="search-results-info">
+                Found {results.length} game{results.length !== 1 ? 's' : ''}
               </div>
-            ))}
-          </div>
+            )}
+            
+            {results.length === 0 && query.trim() && (
+              <div className="status-message">
+                No games found for "{query}". Try different search terms or check AppID.
+              </div>
+            )}
+            
+            <div className="ui-grid">
+              {results.map((g) => (
+                <div className="ui-card" key={g.app_id} onClick={() => window.dispatchEvent(new CustomEvent('open-game-detail', { detail: { appId: g.app_id } }))} style={{ cursor: 'pointer' }}>
+                  <div className="ui-card__thumb" style={{ backgroundImage: `url(${g.header_image})`, backgroundSize: "cover", backgroundPosition: "center" }} />
+                  <div className="ui-card__title">{g.name}</div>
+                  <div className="ui-card__appid">AppID: {g.app_id}</div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>
