@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/tauri";
-import { FiArrowLeft, FiCloud, FiDownload, FiPlay, FiSettings, FiCheck, FiX, FiTrash2 } from "react-icons/fi";
+import { FiArrowLeft, FiCloud, FiDownload, FiPlay, FiSettings, FiCheck, FiX, FiTrash2, FiPackage } from "react-icons/fi";
 import { GameDetailSkeleton } from "./SkeletonLoader";
+import DlcManager from "./DlcManager";
 import "../styles/GameDetail.css";
 
 // Toast Notification Component
@@ -30,7 +31,7 @@ function ToastNotification({ message, type, onClose }) {
 }
 
 // HeroPanel component for actions and info
-function HeroPanel({ detail, onAddToLibrary, onRemoveFromLibrary, isDownloading, isInLibrary }) {
+function HeroPanel({ detail, onAddToLibrary, onRemoveFromLibrary, isDownloading, isInLibrary, onManageDlcs }) {
   const formatDate = (dateStr) => {
     if (!dateStr) return "N/A";
     const date = new Date(dateStr);
@@ -54,14 +55,26 @@ function HeroPanel({ detail, onAddToLibrary, onRemoveFromLibrary, isDownloading,
             {isDownloading ? "Installing..." : "Add to library"}
           </button>
         ) : (
-          <button 
-            className="hero-button hero-button--danger" 
-            onClick={onRemoveFromLibrary}
-            disabled={isDownloading}
-          >
-            <FiTrash2 /> 
-            {isDownloading ? "Removing..." : "Remove from library"}
-          </button>
+          <>
+            <button 
+              className="hero-button hero-button--danger" 
+              onClick={onRemoveFromLibrary}
+              disabled={isDownloading}
+            >
+              <FiTrash2 /> 
+              {isDownloading ? "Removing..." : "Remove from library"}
+            </button>
+            {detail.dlc && detail.dlc.length > 0 && (
+              <button 
+                className="hero-button hero-button--secondary" 
+                onClick={onManageDlcs}
+                disabled={isDownloading}
+              >
+                <FiPackage /> 
+                Manage DLCs ({detail.dlc.length})
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -142,6 +155,7 @@ function GameDetail({ appId, onBack }) {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isInLibrary, setIsInLibrary] = useState(false);
   const [notification, setNotification] = useState(null);
+  const [showDlcManager, setShowDlcManager] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -248,6 +262,18 @@ function GameDetail({ appId, onBack }) {
     setNotification(null);
   };
 
+  const handleManageDlcs = () => {
+    setShowDlcManager(true);
+  };
+
+  const closeDlcManager = () => {
+    setShowDlcManager(false);
+  };
+
+  const showNotificationFromDlc = (message, type) => {
+    setNotification({ message, type });
+  };
+
   if (!detail) {
     return <GameDetailSkeleton />;
   }
@@ -297,6 +323,7 @@ function GameDetail({ appId, onBack }) {
           onRemoveFromLibrary={handleRemoveFromLibrary}
           isDownloading={isDownloading}
           isInLibrary={isInLibrary}
+          onManageDlcs={handleManageDlcs}
         />
 
         {/* Main Content */}
@@ -325,6 +352,15 @@ function GameDetail({ appId, onBack }) {
           <Sidebar detail={detail} activeTab={activeTab} setActiveTab={setActiveTab} />
         </div>
       </section>
+
+      {/* DLC Manager Modal */}
+      {showDlcManager && (
+        <DlcManager 
+          game={detail}
+          onClose={closeDlcManager}
+          showNotification={showNotificationFromDlc}
+        />
+      )}
     </div>
   );
 }

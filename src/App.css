@@ -659,3 +659,17 @@ button:focus-visible {
   color: #666;
   font-family: 'JetBrains Mono', monospace;
 }
+
+/* Hero Button Secondary */
+.hero-button--secondary {
+  background: linear-gradient(135deg, #374151, #4b5563) !important;
+  color: #d1d5db !important;
+  border: 1px solid #6b7280 !important;
+}
+
+.hero-button--secondary:hover {
+  background: linear-gradient(135deg, #4b5563, #6b7280) !important;
+  color: #fff !important;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(75, 85, 99, 0.4);
+}

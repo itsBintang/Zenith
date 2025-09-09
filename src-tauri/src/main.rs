@@ -202,6 +202,7 @@ struct GameDetail {
     sysreq_min: Vec<(String, String)>,
     sysreq_rec: Vec<(String, String)>,
     pc_requirements: Option<PcRequirements>,
+    dlc: Vec<String>, // List of DLC AppIDs
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -834,6 +835,27 @@ async fn get_game_details(app_id: String) -> Result<GameDetail, String> {
         }
     }
 
+    // Extract DLC information
+    let dlc = if let Some(dlc_data) = data.get("dlc") {
+        match dlc_data {
+            serde_json::Value::Array(arr) => {
+                arr.iter()
+                    .filter_map(|v| v.as_u64())
+                    .map(|id| id.to_string())
+                    .collect()
+            }
+            serde_json::Value::Object(obj) => {
+                obj.values()
+                    .filter_map(|v| v.as_u64())
+                    .map(|id| id.to_string())
+                    .collect()
+            }
+            _ => Vec::new(),
+        }
+    } else {
+        Vec::new()
+    };
+
     let game_detail = GameDetail {
         app_id: app_id.clone(),
         name,
@@ -847,6 +869,7 @@ async fn get_game_details(app_id: String) -> Result<GameDetail, String> {
         sysreq_min,
         sysreq_rec,
         pc_requirements,
+        dlc,
     };
     
     // Cache the result
@@ -1250,6 +1273,121 @@ async fn check_steam_status() -> Result<bool, String> {
 }
 
 #[command]
+async fn get_batch_game_details(app_ids: Vec<String>) -> Result<Vec<GameDetail>, String> {
+    let mut details_list = Vec::new();
+    
+    // Process in smaller batches to avoid overwhelming the API
+    for chunk in app_ids.chunks(5) {
+        let mut batch_futures = Vec::new();
+        
+        for app_id in chunk {
+            batch_futures.push(get_game_details(app_id.clone()));
+        }
+        
+        // Wait for all in this batch
+        for future in batch_futures {
+            match future.await {
+                Ok(details) => details_list.push(details),
+                Err(e) => println!("Could not fetch details for AppID: {}", e),
+            }
+        }
+        
+        // Small delay between batches
+        if details_list.len() < app_ids.len() {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    }
+    
+    Ok(details_list)
+}
+
+#[command]
+async fn get_dlcs_in_lua(app_id: String) -> Result<Vec<String>, String> {
+    let steam_config_path = find_steam_config_path().map_err(|e| e.to_string())?;
+    let stplugin_dir = steam_config_path.join("stplug-in");
+    let lua_file_path = stplugin_dir.join(format!("{}.lua", app_id));
+    
+    if !lua_file_path.exists() {
+        return Ok(Vec::new()); // No lua file means no DLCs installed
+    }
+    
+    let content = fs::read_to_string(&lua_file_path).map_err(|e| e.to_string())?;
+    
+    // Parse addappid() calls from lua file
+    let re = Regex::new(r"addappid\s*\(\s*(\d+)\s*\)").unwrap();
+    let installed_dlcs: Vec<String> = re.captures_iter(&content)
+        .map(|cap| cap[1].to_string())
+        .filter(|id| *id != app_id) // Exclude the main game's ID
+        .collect();
+        
+    println!("Found {} installed DLCs for game {}", installed_dlcs.len(), app_id);
+    Ok(installed_dlcs)
+}
+
+#[command]
+async fn sync_dlcs_in_lua(main_app_id: String, dlc_ids_to_set: Vec<String>) -> Result<String, String> {
+    let steam_config_path = find_steam_config_path().map_err(|e| e.to_string())?;
+    let stplugin_dir = steam_config_path.join("stplug-in");
+    let lua_file_path = stplugin_dir.join(format!("{}.lua", main_app_id));
+    
+    // Read existing content or create new
+    let original_content = if lua_file_path.exists() {
+        fs::read_to_string(&lua_file_path).map_err(|e| e.to_string())?
+    } else {
+        // Create new lua file if it doesn't exist
+        String::new()
+    };
+
+    // Remove existing DLC entries but keep the main game and other content
+    let addappid_re = Regex::new(r"addappid\s*\(\s*(\d+)\s*\)").unwrap();
+    let filtered_lines: Vec<&str> = original_content
+        .lines()
+        .filter(|line| {
+            if let Some(caps) = addappid_re.captures(line) {
+                if let Some(id_str) = caps.get(1) {
+                    // Keep only the main game ID, remove all DLC IDs
+                    return id_str.as_str() == main_app_id;
+                }
+            }
+            // Keep non-addappid lines
+            true
+        })
+        .collect();
+
+    let mut new_content = filtered_lines.join("\n");
+    
+    // Add main game if not present
+    if !new_content.contains(&format!("addappid({})", main_app_id)) {
+        if !new_content.is_empty() && !new_content.ends_with('\n') {
+            new_content.push('\n');
+        }
+        new_content.push_str(&format!("addappid({})\n", main_app_id));
+    }
+    
+    // Add selected DLCs
+    if !dlc_ids_to_set.is_empty() {
+        if !new_content.is_empty() && !new_content.ends_with('\n') {
+            new_content.push('\n');
+        }
+        new_content.push_str("\n-- DLCs managed by Zenith --\n");
+        for dlc_id in &dlc_ids_to_set {
+            new_content.push_str(&format!("addappid({})\n", dlc_id));
+        }
+    }
+
+    // Ensure directory exists
+    if let Some(parent) = lua_file_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+
+    // Write back to file
+    fs::write(&lua_file_path, new_content).map_err(|e| e.to_string())?;
+
+    println!("Successfully synced {} DLC(s) for game {}", dlc_ids_to_set.len(), main_app_id);
+    Ok(format!("Successfully synced {} DLC(s)", dlc_ids_to_set.len()))
+}
+
+#[command]
 async fn clear_cache() -> Result<String, String> {
     GAME_CACHE.cleanup_expired();
     Ok("Cache cleared successfully".to_string())
@@ -1342,6 +1480,9 @@ fn main() {
             initialize_app,
             restart_steam,
             check_steam_status,
+            get_batch_game_details,
+            get_dlcs_in_lua,
+            sync_dlcs_in_lua,
             clear_cache,
             remove_game
         ])

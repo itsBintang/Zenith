@@ -7,11 +7,13 @@ function Catalogue() {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState([]);
   const [error, setError] = useState("");
+  const [hasSearched, setHasSearched] = useState(false);
 
   const onSearch = async () => {
     if (!query.trim()) return;
     setLoading(true);
     setError("");
+    setHasSearched(true);
     try {
       const res = await invoke("search_games", { query: query.trim() });
       setResults(res || []);
@@ -30,9 +32,16 @@ function Catalogue() {
         <div className="ui-header__actions">
           <div className="ui-input ui-input--search">
             <input
-              placeholder="Search by AppID, name, or Steam URL (e.g., https://store.steampowered.com/app/1086940/)"
+              placeholder="Search by AppID, name, or Steam URL"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                // Reset search state when query is cleared
+                if (e.target.value.trim() === "") {
+                  setHasSearched(false);
+                  setResults([]);
+                }
+              }}
               onKeyDown={(e) => e.key === "Enter" && onSearch()}
             />
           </div>
@@ -55,7 +64,7 @@ function Catalogue() {
               </div>
             )}
             
-            {results.length === 0 && query.trim() && (
+            {results.length === 0 && hasSearched && !loading && (
               <div className="status-message">
                 No games found for "{query}". Try different search terms or check AppID.
               </div>
