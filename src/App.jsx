@@ -5,6 +5,7 @@ import Home from "./components/Home";
 import Catalogue from "./components/Catalogue";
 import GameDetail from "./components/GameDetail";
 import LoadingScreen from "./components/LoadingScreen";
+import Settings from "./components/Settings";
 import "./App.css";
 
 function App() {
@@ -126,6 +127,9 @@ function App() {
         onBack={() => setRoute('catalogue')} 
         showBackButton={!fromLibrary}
       />;
+      break;
+    case 'settings':
+      content = <Settings />;
       break;
     default:
       content = <Home />;

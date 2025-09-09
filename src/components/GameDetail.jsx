@@ -182,9 +182,13 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
 
     setIsDownloading(true);
     try {
+      const useTempZip = JSON.parse(localStorage.getItem('zenith.useTempZip') ?? 'true');
+      const downloadFolder = localStorage.getItem('zenith.downloadFolder') || null;
       const result = await invoke("download_game", { 
         appId: detail.app_id, 
-        gameName: detail.name 
+        gameName: detail.name,
+        saveZip: !useTempZip,
+        saveDir: downloadFolder
       });
       
       console.log("Download result:", result); // Debug log

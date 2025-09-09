@@ -237,6 +237,12 @@ button:focus-visible {
   gap: 16px;
 }
 
+/* Settings */
+.settings-section { display: flex; flex-direction: column; gap: 16px; }
+.settings-field { display: flex; flex-direction: column; gap: 8px; }
+.settings-row { display: flex; gap: 8px; align-items: center; }
+.settings-input { flex: 1; background: #15161a; border: 1px solid #26272b; border-radius: 10px; padding: 8px 10px; color: #e5e7eb; }
+
 .ui-sidebar__section {
   padding-bottom: 8px;
   border-bottom: 1px solid #1f2023;

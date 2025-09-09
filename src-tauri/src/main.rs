@@ -17,6 +17,18 @@ use tokio::time::sleep;
 use futures::stream::{self, StreamExt};
 use std::process::Command;
 
+fn sanitize_filename(name: &str) -> String {
+    let mut out = String::with_capacity(name.len());
+    for ch in name.chars() {
+        if ch.is_alphanumeric() || ch == ' ' || ch == '-' || ch == '_' {
+            out.push(ch);
+        } else {
+            out.push('_');
+        }
+    }
+    out
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct DownloadResult {
     success: bool,
@@ -235,18 +247,29 @@ enum RepoType {
     Branch,
     Decrypted,
     DirectZip, // For direct ZIP file downloads like Furcate.eu
+    DirectUrl, // For direct URL downloads with specific patterns
 }
 
 #[command]
-async fn download_game(app_id: String, game_name: String) -> Result<DownloadResult, String> {
+async fn download_game(app_id: String, game_name: String, save_zip: Option<bool>, save_dir: Option<String>) -> Result<DownloadResult, String> {
     println!("Starting seamless installation for AppID: {} ({})", app_id, game_name);
+    let should_save_zip = save_zip.unwrap_or(false);
+    let save_directory: Option<PathBuf> = save_dir.clone().and_then(|p| {
+        let pb = PathBuf::from(p);
+        if pb.exists() { Some(pb) } else { None }
+    });
     
    // Setup repositories to try (in priority order)
-let mut repos = Vec::new();
-repos.push(("https://furcate.eu/FILES/".to_string(), RepoType::DirectZip));
-repos.push(("itsBintang/ManifestHub".to_string(), RepoType::Branch)); // Your custom repo - Priority #1
-repos.push(("Fairyvmos/bruh-hub".to_string(), RepoType::Branch));
-repos.push(("SteamAutoCracks/ManifestHub".to_string(), RepoType::Branch));
+   let mut repos = Vec::new();
+   // Prioritas pertama
+   repos.push(("https://furcate.eu/FILES/".to_string(), RepoType::DirectZip));
+   repos.push(("Fairyvmos/bruh-hub".to_string(), RepoType::Branch));
+   repos.push(("SteamAutoCracks/ManifestHub".to_string(), RepoType::Branch));
+   repos.push(("itsBintang/ManifestHub".to_string(), RepoType::Branch));
+   repos.push(("https://raw.githubusercontent.com/sushi-dev55/sushitools-games-repo/refs/heads/main/".to_string(), RepoType::DirectZip));
+   repos.push(("http://masss.pythonanywhere.com/storage?auth=IEOIJE54esfsipoE56GE4&appid=".to_string(), RepoType::DirectUrl));
+   repos.push(("https://mellyiscoolaf.pythonanywhere.com/".to_string(), RepoType::DirectUrl));
+   
     
     // Use global HTTP client
     
@@ -266,6 +289,17 @@ repos.push(("SteamAutoCracks/ManifestHub".to_string(), RepoType::Branch));
                     Ok(response) => {
                         if response.status().is_success() {
                             let bytes = response.bytes().await.map_err(|e| e.to_string())?;
+                            if should_save_zip {
+                                if let Some(dir) = save_directory.clone() {
+                                    let filename = format!("{}-{}.zip", app_id, sanitize_filename(&game_name));
+                                    let path = dir.join(filename);
+                                    if let Err(e) = fs::write(&path, &bytes) {
+                                        println!("Failed to save ZIP to {:?}: {}", path, e);
+                                    } else {
+                                        println!("Saved ZIP to {:?}", path);
+                                    }
+                                }
+                            }
                             
                             // Process ZIP in memory and install to Steam
                             match process_and_install_to_steam(&bytes, &app_id, &game_name).await {
@@ -301,6 +335,63 @@ repos.push(("SteamAutoCracks/ManifestHub".to_string(), RepoType::Branch));
                     Ok(response) => {
                         if response.status().is_success() {
                             let bytes = response.bytes().await.map_err(|e| e.to_string())?;
+                            if should_save_zip {
+                                if let Some(dir) = save_directory.clone() {
+                                    let filename = format!("{}-{}.zip", app_id, sanitize_filename(&game_name));
+                                    let path = dir.join(filename);
+                                    if let Err(e) = fs::write(&path, &bytes) {
+                                        println!("Failed to save ZIP to {:?}: {}", path, e);
+                                    } else {
+                                        println!("Saved ZIP to {:?}", path);
+                                    }
+                                }
+                            }
+                            
+                            // Process ZIP in memory and install to Steam
+                            match process_and_install_to_steam(&bytes, &app_id, &game_name).await {
+                                Ok(install_info) => {
+                                    return Ok(DownloadResult {
+                                        success: true,
+                                        message: format!("Successfully installed {} to Steam! {}", game_name, install_info),
+                                        file_path: None, // No local file saved
+                                    });
+                                }
+                                Err(e) => {
+                                    println!("Failed to install to Steam: {}", e);
+                                    continue; // Try next repository
+                                }
+                            }
+                        } else {
+                            println!("Failed to download from {}: HTTP {}", repo_name, response.status());
+                        }
+                    }
+                    Err(e) => {
+                        println!("Error downloading from {}: {}", repo_name, e);
+                    }
+                }
+            }
+            RepoType::DirectUrl => {
+                let download_url = format!("{}{}", repo_name, app_id);
+                println!("Downloading from: {}", download_url);
+                
+                match HTTP_CLIENT.get(&download_url)
+                    .timeout(std::time::Duration::from_secs(60))
+                    .send()
+                    .await {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            let bytes = response.bytes().await.map_err(|e| e.to_string())?;
+                            if should_save_zip {
+                                if let Some(dir) = save_directory.clone() {
+                                    let filename = format!("{}-{}.zip", app_id, sanitize_filename(&game_name));
+                                    let path = dir.join(filename);
+                                    if let Err(e) = fs::write(&path, &bytes) {
+                                        println!("Failed to save ZIP to {:?}: {}", path, e);
+                                    } else {
+                                        println!("Saved ZIP to {:?}", path);
+                                    }
+                                }
+                            }
                             
                             // Process ZIP in memory and install to Steam
                             match process_and_install_to_steam(&bytes, &app_id, &game_name).await {
