@@ -74,10 +74,19 @@ function Catalogue({ onGameSelect, catalogueState, setCatalogueState }) {
             
             <div className="ui-grid">
               {results.map((g) => (
-                <div className="ui-card" key={g.app_id} onClick={() => onGameSelect && onGameSelect(g.app_id)} style={{ cursor: 'pointer' }}>
-                  <div className="ui-card__thumb" style={{ backgroundImage: `url(${g.header_image})`, backgroundSize: "cover", backgroundPosition: "center" }} />
-                  <div className="ui-card__title">{g.name}</div>
-                  <div className="ui-card__appid">AppID: {g.app_id}</div>
+                <div className="ui-card ui-card--hero" key={g.app_id} onClick={() => onGameSelect && onGameSelect(g.app_id)} style={{ cursor: 'pointer' }}>
+                  <div 
+                    className="ui-card__hero-image"
+                    style={{
+                      backgroundImage: `url(${g.header_image})`,
+                      backgroundSize: "cover",
+                      backgroundPosition: "center"
+                    }}
+                  />
+                  <div className="ui-card__hero-overlay">
+                    <h3 className="ui-card__hero-title">{g.name}</h3>
+                    <div className="ui-card__hero-appid">AppID: {g.app_id}</div>
+                  </div>
                 </div>
               ))}
             </div>

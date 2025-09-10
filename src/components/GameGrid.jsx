@@ -44,20 +44,22 @@ function GameGrid({ onGameSelect }) {
       <div className="ui-grid">
         {featuredGames.map((game) => (
           <div 
-            className="ui-card" 
+            className="ui-card ui-card--hero" 
             key={game.app_id}
             onClick={() => onGameSelect && onGameSelect(game.app_id)}
             style={{ cursor: 'pointer' }}
           >
             <div 
-              className="ui-card__thumb" 
-              style={{ 
-                backgroundImage: `url(${game.header_image})`, 
-                backgroundSize: "cover", 
-                backgroundPosition: "center" 
-              }} 
+              className="ui-card__hero-image"
+              style={{
+                backgroundImage: `url(${game.header_image})`,
+                backgroundSize: "cover",
+                backgroundPosition: "center"
+              }}
             />
-            <div className="ui-card__title">{game.title}</div>
+            <div className="ui-card__hero-overlay">
+              <h3 className="ui-card__hero-title">{game.title}</h3>
+            </div>
           </div>
         ))}
       </div>

@@ -350,6 +350,13 @@ button:focus-visible {
 .ui-card__thumb { height: 140px; background: linear-gradient(135deg, #2a2b30, #1b1c20); }
 .ui-card__title { padding: 10px 12px; color: #e5e7eb; font-weight: 600; }
 
+/* Hero Card Style (untuk mengikuti design Hollow Knight) */
+.ui-card--hero { position: relative; height: 200px; }
+.ui-card__hero-image { position: absolute; inset: 0; background: radial-gradient(1200px 300px at 40% 50%, #3b3c42, #1b1c20); opacity: .8; }
+.ui-card__hero-overlay { position: absolute; inset: 0; padding: 16px; display: flex; flex-direction: column; justify-content: flex-end; background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.55) 60%); }
+.ui-card__hero-title { font-size: 18px; font-weight: 700; color: #fff; margin: 0; margin-bottom: 4px; }
+.ui-card__hero-appid { font-size: 12px; color: #ccc; font-family: 'JetBrains Mono', monospace; opacity: 0.8; }
+
 /* Game Detail */
 .ui-btn--back {
   background: transparent;
