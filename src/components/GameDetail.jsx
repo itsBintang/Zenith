@@ -73,14 +73,17 @@ function HeroPanel({ detail, onAddToLibrary, onRemoveFromLibrary, isDownloading,
 function Sidebar({ detail, activeTab, setActiveTab }) {
   const formatRequirements = (reqHtml) => {
     if (!reqHtml) return { __html: "<p>No requirements specified</p>" };
-    return { __html: reqHtml };
+    
+    // Remove the "Minimum:" or "Recommended:" prefix if it exists
+    const cleanedHtml = reqHtml.replace(/^(<strong>)?(Minimum|Recommended):?(<\/strong>)?(<br>)?/i, '').trim();
+    return { __html: cleanedHtml };
   };
 
   return (
     <aside className="content-sidebar">
       {/* Requirements Section */}
       <div className="sidebar-section">
-        <h3 className="sidebar-section__title">Requirements</h3>
+        <h3 className="sidebar-section__title">System requirements</h3>
         <div className="requirement__button-container">
           <button
             className={`requirement__button ${activeTab === 'minimum' ? 'active' : ''}`}
@@ -95,12 +98,15 @@ function Sidebar({ detail, activeTab, setActiveTab }) {
             Recommended
           </button>
         </div>
-        <div 
-          className="requirement__details"
-          dangerouslySetInnerHTML={formatRequirements(
-            activeTab === 'minimum' ? detail.pc_requirements?.minimum : detail.pc_requirements?.recommended
-          )}
-        />
+        <div className="requirement__content">
+          <h4 className="requirement__type-title">{activeTab === 'minimum' ? 'Minimum:' : 'Recommended:'}</h4>
+          <div 
+            className="requirement__details"
+            dangerouslySetInnerHTML={formatRequirements(
+              activeTab === 'minimum' ? detail.pc_requirements?.minimum : detail.pc_requirements?.recommended
+            )}
+          />
+        </div>
       </div>
     </aside>
   );
@@ -293,9 +299,13 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
         {/* Hero Section */}
         <div className="game-details__hero">
           <img
-            src={detail.header_image || detail.banner_image}
+            src={`https://cdn.akamai.steamstatic.com/steam/apps/${detail.app_id}/library_hero.jpg`}
             className="game-details__hero-image"
             alt={detail.name}
+            onError={(e) => {
+              // Fallback to original image if CDN fails
+              e.target.src = detail.header_image || detail.banner_image;
+            }}
           />
           
           <div className="game-details__hero-controls">

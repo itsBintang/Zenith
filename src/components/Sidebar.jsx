@@ -45,6 +45,7 @@ function Sidebar({ active = "home", onNavigate, onGameSelect }) {
 
   return (
     <aside className="ui-sidebar">
+      {/* Sign in Section */}
       <div className="ui-sidebar__section">
         <button className="ui-btn ui-btn--ghost ui-btn--lg">
           <FiLogIn size={18} />
@@ -52,6 +53,7 @@ function Sidebar({ active = "home", onNavigate, onGameSelect }) {
         </button>
       </div>
 
+      {/* Main Navigation */}
       <nav className="ui-sidebar__nav">
         <a className={`ui-nav-item ${active === "home" ? "ui-nav-item--active" : ""}`} onClick={() => onNavigate && onNavigate("home")}>
           <FiHome size={18} />
@@ -71,9 +73,12 @@ function Sidebar({ active = "home", onNavigate, onGameSelect }) {
         </a>
       </nav>
 
-      <MyLibrary onGameSelect={onGameSelect} />
+      {/* My Library Section */}
+      <div className="ui-sidebar__library-container">
+        <MyLibrary onGameSelect={onGameSelect} />
+      </div>
       
-      {/* Steam Control Section */}
+      {/* Steam Control Section - Always at bottom */}
       <div className="ui-sidebar__steam-control">
         <button 
           className={`ui-btn ui-btn--steam ${isRestarting ? 'restarting' : ''}`}
