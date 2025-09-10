@@ -27,10 +27,7 @@
 .logo-text {
   font-size: 3rem;
   font-weight: 700;
-  background: linear-gradient(135deg, #8b45ff, #ff6b6b);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #e9eaee; /* Changed from gradient to solid color */
   margin: 0;
   letter-spacing: 0.1em;
 }
@@ -51,7 +48,7 @@
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #8b45ff, #ff6b6b);
+  background: linear-gradient(90deg, #4f4f4f, #8f8f8f); /* Changed from bright gradient to grey gradient */
   border-radius: 4px;
   transition: width 0.3s ease;
   position: relative;
