@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { FiHome, FiBox, FiDownload, FiSettings, FiLogIn, FiRefreshCw } from "react-icons/fi";
+import { FiHome, FiBox, FiDownload, FiSettings, FiRefreshCw } from "react-icons/fi";
 import { invoke } from "@tauri-apps/api/tauri";
+import logoImage from "../../logo.jpg";
 import MyLibrary from './MyLibrary'; // Assuming MyLibrary is in the same folder
 
 function Sidebar({ active = "home", onNavigate, onGameSelect }) {
@@ -45,12 +46,12 @@ function Sidebar({ active = "home", onNavigate, onGameSelect }) {
 
   return (
     <aside className="ui-sidebar">
-      {/* Sign in Section */}
+      {/* Profile Section */}
       <div className="ui-sidebar__section">
-        <button className="ui-btn ui-btn--ghost ui-btn--lg">
-          <FiLogIn size={18} />
-          <span>Sign in</span>
-        </button>
+        <div className="ui-profile">
+          <img src={logoImage} alt="Nazril" className="ui-profile__avatar" />
+          <span className="ui-profile__name">Nazril</span>
+        </div>
       </div>
 
       {/* Main Navigation */}
