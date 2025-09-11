@@ -9,8 +9,17 @@ function MyLibrary({ onGameSelect }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('');
+  const [lastFetchTime, setLastFetchTime] = useState(0);
 
   const fetchLibraryGames = async () => {
+    // Prevent rapid successive calls (minimum 2 seconds between fetches)
+    const now = Date.now();
+    if (now - lastFetchTime < 2000) {
+      console.log('Skipping fetch - too soon after last request');
+      return;
+    }
+    
+    setLastFetchTime(now);
     setIsLoading(true);
     setError('');
     try {

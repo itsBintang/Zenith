@@ -69,8 +69,8 @@ function HeroPanel({ detail, onAddToLibrary, onRemoveFromLibrary, isDownloading,
   );
 }
 
-// Sidebar component for requirements only
-function Sidebar({ detail, activeTab, setActiveTab }) {
+// Sidebar component for requirements and DRM
+function Sidebar({ detail, activeTab, setActiveTab, drmData, loadingDrm }) {
   const formatRequirements = (reqHtml) => {
     if (!reqHtml) return { __html: "<p>No requirements specified</p>" };
     
@@ -81,6 +81,25 @@ function Sidebar({ detail, activeTab, setActiveTab }) {
 
   return (
     <aside className="content-sidebar">
+      {/* DRM Section */}
+      {(drmData || loadingDrm) && (
+        <div className="sidebar-section">
+          <h3 className="sidebar-section__title">DRM Notice</h3>
+          <div className="drm__content">
+            {loadingDrm ? (
+              <p className="drm__loading">Loading DRM information...</p>
+            ) : drmData ? (
+              <div 
+                className="drm__notice"
+                dangerouslySetInnerHTML={{ __html: drmData }}
+              />
+            ) : (
+              <p className="drm__none">No DRM information available</p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Requirements Section */}
       <div className="sidebar-section">
         <h3 className="sidebar-section__title">System requirements</h3>
@@ -144,25 +163,55 @@ function GallerySlider({ screenshots }) {
 
 function GameDetail({ appId, onBack, showBackButton = true }) {
   const [detail, setDetail] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("minimum");
   const [gameColor, setGameColor] = useState("#1a1a1a");
   const [isDownloading, setIsDownloading] = useState(false);
   const [isInLibrary, setIsInLibrary] = useState(false);
   const [notification, setNotification] = useState(null);
   const [showDlcManager, setShowDlcManager] = useState(false);
+  const [drmData, setDrmData] = useState(null);
+  const [loadingDrm, setLoadingDrm] = useState(false);
 
   useEffect(() => {
     let mounted = true;
-    invoke("get_game_details", { appId }).then((d) => { 
-      if (mounted) {
-        setDetail(d);
-        // Simple color extraction - in real implementation, you'd extract from the hero image
-        setGameColor("#2a2a3a");
-        // Check if game is already in library
-        checkIfInLibrary(appId);
+    let hasRequested = false;
+    
+    const loadGameDetails = async () => {
+      // Prevent double request in React.StrictMode
+      if (hasRequested) return;
+      hasRequested = true;
+      
+      try {
+        setIsLoading(true);
+        const d = await invoke("get_game_details", { appId });
+        if (mounted) {
+          setDetail(d);
+          setGameColor("#2a2a3a");
+          setIsLoading(false);
+          checkIfInLibrary(appId);
+          // DRM data sudah ada di game detail response
+          if (d.drm_notice) {
+            setDrmData(d.drm_notice);
+          } else {
+            setDrmData("No DRM information available");
+          }
+          setLoadingDrm(false);
+        }
+      } catch (error) {
+        console.error("Failed to load game details:", error);
+        if (mounted) {
+          setDetail(null);
+          setIsLoading(false);
+        }
       }
-    });
-    return () => { mounted = false; };
+    };
+    
+    loadGameDetails();
+    
+    return () => { 
+      mounted = false; 
+    };
   }, [appId]);
 
   const checkIfInLibrary = async (appId) => {
@@ -172,16 +221,11 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
       setIsInLibrary(isInLibrary);
     } catch (error) {
       console.error("Error checking library:", error);
-      // Fallback to the full library check if the specific call fails
-      try {
-        const libraryGames = await invoke("get_library_games");
-        const gameInLibrary = libraryGames.some(game => game.app_id === appId);
-        setIsInLibrary(gameInLibrary);
-      } catch (fallbackError) {
-        console.error("Fallback check also failed:", fallbackError);
-      }
+      // Don't fallback to fetching all games - it's too expensive
+      setIsInLibrary(false);
     }
   };
+
 
   const handleAddToLibrary = async () => {
     if (!detail || isDownloading) return;
@@ -272,7 +316,7 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
     setNotification({ message, type });
   };
 
-  if (!detail) {
+  if (isLoading || !detail) {
     return <GameDetailSkeleton />;
   }
 
@@ -353,7 +397,7 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
           </div>
 
           {/* Sidebar */}
-          <Sidebar detail={detail} activeTab={activeTab} setActiveTab={setActiveTab} />
+          <Sidebar detail={detail} activeTab={activeTab} setActiveTab={setActiveTab} drmData={drmData} loadingDrm={loadingDrm} />
         </div>
       </section>
 

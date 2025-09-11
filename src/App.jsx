@@ -24,7 +24,14 @@ function App() {
 
   // App initialization
   React.useEffect(() => {
+    let isMounted = true;
+    let hasInitialized = false;
+    
     const initializeApp = async () => {
+      // Prevent double initialization in React.StrictMode
+      if (hasInitialized) return;
+      hasInitialized = true;
+      
       try {
         setLoadingStep("Starting initialization...");
         setLoadingProgress(10);
@@ -32,11 +39,16 @@ function App() {
         // Small delay for smooth UX
         await new Promise(resolve => setTimeout(resolve, 500));
         
+        if (!isMounted) return;
+        
         const progressSteps = await invoke('initialize_app');
+        
+        if (!isMounted) return;
         
         // Animate through progress steps
         for (let i = 0; i < progressSteps.length; i++) {
           const step = progressSteps[i];
+          if (!isMounted) return;
           setLoadingStep(step.step);
           setLoadingProgress(step.progress);
           
@@ -44,25 +56,35 @@ function App() {
           await new Promise(resolve => setTimeout(resolve, 300));
         }
         
+        if (!isMounted) return;
+        
         // Final completion
         setLoadingStep("Welcome to Zenith!");
         setLoadingProgress(100);
         await new Promise(resolve => setTimeout(resolve, 800));
         
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
         
       } catch (error) {
         console.error('App initialization failed:', error);
-        setInitError(error.toString());
-        setLoadingStep("Initialization failed");
-        // Still allow app to continue after 3 seconds
-        setTimeout(() => {
-          setIsLoading(false);
-        }, 3000);
+        if (isMounted) {
+          setInitError(error.toString());
+          setLoadingStep("Initialization failed");
+          // Still allow app to continue after 3 seconds
+          setTimeout(() => {
+            if (isMounted) setIsLoading(false);
+          }, 3000);
+        }
       }
     };
 
     initializeApp();
+    
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   React.useEffect(() => {

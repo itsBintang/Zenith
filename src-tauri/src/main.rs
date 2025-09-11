@@ -8,6 +8,7 @@ use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
 use tauri::command;
 use walkdir::WalkDir;
 use regex::Regex;
@@ -36,7 +37,7 @@ struct DownloadResult {
     file_path: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct CacheEntry<T> {
     data: T,
     timestamp: u64,
@@ -65,17 +66,45 @@ struct GameCache {
     in_flight_requests: Arc<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>>,
     last_request_time: Arc<Mutex<u64>>,
     request_delay_ms: u64,
+    cache_dir: PathBuf,
+    consecutive_errors: Arc<Mutex<u32>>,
+    last_error_time: Arc<Mutex<u64>>,
+    request_queue: Arc<Mutex<Vec<String>>>,
+    is_processing_queue: Arc<Mutex<bool>>,
+    circuit_breaker_open: Arc<Mutex<bool>>,
+    circuit_breaker_failures: Arc<Mutex<u32>>,
 }
 
 impl GameCache {
     fn new() -> Self {
-        Self {
+        // Create cache directory in app data folder
+        let cache_dir = dirs::data_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("zenith-launcher")
+            .join("cache");
+        
+        // Ensure cache directory exists
+        let _ = fs::create_dir_all(&cache_dir);
+        
+        let mut instance = Self {
             game_details: Arc::new(Mutex::new(HashMap::new())),
             game_names: Arc::new(Mutex::new(HashMap::new())),
             in_flight_requests: Arc::new(Mutex::new(HashMap::new())),
             last_request_time: Arc::new(Mutex::new(0)),
-            request_delay_ms: 100, // 100ms between requests
-        }
+            request_delay_ms: 200, // Increased to 200ms between requests for safety
+            cache_dir: cache_dir.clone(),
+            consecutive_errors: Arc::new(Mutex::new(0)),
+            last_error_time: Arc::new(Mutex::new(0)),
+            request_queue: Arc::new(Mutex::new(Vec::new())),
+            is_processing_queue: Arc::new(Mutex::new(false)),
+            circuit_breaker_open: Arc::new(Mutex::new(false)),
+            circuit_breaker_failures: Arc::new(Mutex::new(0)),
+        };
+        
+        // Load cache from disk
+        instance.load_from_disk();
+        
+        instance
     }
     
     async fn get_game_details(&self, app_id: &str) -> Option<GameDetail> {
@@ -83,6 +112,20 @@ impl GameCache {
         if let Some(entry) = cache.get(app_id) {
             if !entry.is_expired() {
                 return Some(entry.data.clone());
+            } else {
+                // Return stale data while revalidating in background
+                let stale_data = entry.data.clone();
+                drop(cache);
+                
+                // Queue for background refresh (game details)
+                let app_id_clone = app_id.to_string();
+                tokio::spawn(async move {
+                    // Refresh in background
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    let _ = fetch_game_details_background(&app_id_clone).await;
+                });
+                
+                return Some(stale_data);
             }
         }
         None
@@ -90,13 +133,13 @@ impl GameCache {
     
     fn set_game_details(&self, app_id: String, details: GameDetail) {
         let mut cache = self.game_details.lock().unwrap();
-        let dlc_count = details.dlc.len();
         cache.insert(app_id.clone(), CacheEntry::new(details, 86400)); // 1 day TTL
-        if dlc_count > 0 {
-            println!("Cached game details for: {} (with {} DLCs)", app_id, dlc_count);
-        } else {
-            println!("Cached game details for: {} (DLC lazy-loaded)", app_id);
-        }
+        drop(cache); // Release lock before saving
+        self.save_to_disk();
+        
+        // Only log in debug mode
+        #[cfg(debug_assertions)]
+        println!("Cached game details for {}", app_id);
     }
     
     async fn get_game_name(&self, app_id: &str) -> Option<String> {
@@ -104,6 +147,16 @@ impl GameCache {
         if let Some(entry) = cache.get(app_id) {
             if !entry.is_expired() {
                 return Some(entry.data.clone());
+            } else {
+                // Return stale data while revalidating in background
+                let stale_data = entry.data.clone();
+                drop(cache);
+                
+                // Queue for background refresh
+                self.queue_for_refresh(app_id.to_string());
+                
+                // Return stale data immediately (stale-while-revalidate)
+                return Some(stale_data);
             }
         }
         None
@@ -111,8 +164,13 @@ impl GameCache {
     
     fn set_game_name(&self, app_id: String, name: String) {
         let mut cache = self.game_names.lock().unwrap();
-        cache.insert(app_id.clone(), CacheEntry::new(name, 604800)); // 7 days TTL
-        println!("Cached game name for: {}", app_id);
+        cache.insert(app_id.clone(), CacheEntry::new(name.clone(), 604800)); // 7 days TTL
+        drop(cache); // Release lock before saving
+        self.save_to_disk();
+        
+        // Only log in debug mode
+        #[cfg(debug_assertions)]
+        println!("Cached game name for {}: {}", app_id, name);
     }
     
     async fn get_or_create_request_lock(&self, app_id: &str) -> Arc<tokio::sync::Mutex<()>> {
@@ -134,25 +192,68 @@ impl GameCache {
     async fn throttle_request(&self) {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
         
+        // Calculate delay with exponential backoff
         let delay = {
-            let last_request = self.last_request_time.lock().unwrap();
-            if now - *last_request < self.request_delay_ms {
-                Some(self.request_delay_ms - (now - *last_request))
+            let mut last_request = self.last_request_time.lock().unwrap();
+            let consecutive_errors = self.consecutive_errors.lock().unwrap();
+            
+            // Handle case where last_request might be 0 or greater than now
+            let time_since_last = if *last_request > now || *last_request == 0 {
+                // First request or clock issue - no delay needed
+                0
             } else {
+                now - *last_request
+            };
+            
+            // Base delay with exponential backoff based on consecutive errors
+            let base_delay = self.request_delay_ms;
+            let backoff_multiplier = 2_u64.pow((*consecutive_errors).min(5)); // Cap at 2^5 = 32x
+            let required_delay = base_delay * backoff_multiplier;
+            
+            if time_since_last < required_delay {
+                let delay = required_delay.saturating_sub(time_since_last);
+                // Update the last request time now to prevent race conditions
+                *last_request = now + delay;
+                Some(delay)
+            } else {
+                *last_request = now;
                 None
             }
         }; // Lock is dropped here
         
         if let Some(delay_ms) = delay {
-            println!("Throttling request, sleeping for {}ms", delay_ms);
+            // Only log significant delays
+            if delay_ms > 500 {
+                println!("Rate limiting: waiting {}ms before next request", delay_ms);
+            }
             sleep(Duration::from_millis(delay_ms)).await;
         }
+    }
+    
+    fn record_error(&self) {
+        let mut consecutive_errors = self.consecutive_errors.lock().unwrap();
+        *consecutive_errors += 1;
         
-        // Update the last request time
-        {
-            let mut last_request = self.last_request_time.lock().unwrap();
-            *last_request = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
-        } // Lock is dropped here
+        let mut last_error_time = self.last_error_time.lock().unwrap();
+        *last_error_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        
+        // Increment circuit breaker failures
+        let mut cb_failures = self.circuit_breaker_failures.lock().unwrap();
+        *cb_failures += 1;
+        drop(cb_failures);
+        
+        println!("API error recorded. Consecutive errors: {}", *consecutive_errors);
+        
+        // Check if we should open circuit breaker
+        self.check_circuit_breaker();
+    }
+    
+    fn reset_error_count(&self) {
+        let mut consecutive_errors = self.consecutive_errors.lock().unwrap();
+        if *consecutive_errors > 0 {
+            println!("Resetting error count from {}", *consecutive_errors);
+            *consecutive_errors = 0;
+        }
     }
     
     fn cleanup_expired(&self) {
@@ -167,8 +268,11 @@ impl GameCache {
         names_cache.retain(|_, entry| !entry.is_expired());
         let names_after = names_cache.len();
         
-        println!("Cache cleanup: Details {}->{}, Names {}->{}", 
-                details_before, details_after, names_before, names_after);
+        // Only log if something was actually cleaned
+        if details_before != details_after || names_before != names_after {
+            println!("Cache cleanup: Details {}->{}, Names {}->{}", 
+                    details_before, details_after, names_before, names_after);
+        }
     }
     
     fn cache_stats(&self) {
@@ -178,6 +282,172 @@ impl GameCache {
         
         println!("Cache stats: {} game details, {} game names, {} in-flight requests", 
                 details_cache.len(), names_cache.len(), in_flight.len());
+    }
+    
+    fn save_to_disk(&self) {
+        // Save game names cache
+        let names_cache = self.game_names.lock().unwrap();
+        if !names_cache.is_empty() {
+            let names_path = self.cache_dir.join("game_names.json");
+            if let Ok(json) = serde_json::to_string(&*names_cache) {
+                let _ = fs::write(names_path, json);
+            }
+        }
+        drop(names_cache);
+        
+        // Save game details cache
+        let details_cache = self.game_details.lock().unwrap();
+        if !details_cache.is_empty() {
+            let details_path = self.cache_dir.join("game_details.json");
+            if let Ok(json) = serde_json::to_string(&*details_cache) {
+                let _ = fs::write(details_path, json);
+            }
+        }
+    }
+    
+    fn load_from_disk(&mut self) {
+        // Load game names cache
+        let names_path = self.cache_dir.join("game_names.json");
+        if names_path.exists() {
+            if let Ok(content) = fs::read_to_string(&names_path) {
+                if let Ok(cached_names) = serde_json::from_str::<HashMap<String, CacheEntry<String>>>(&content) {
+                    let mut names_cache = self.game_names.lock().unwrap();
+                    // Only load non-expired entries
+                    for (key, entry) in cached_names {
+                        if !entry.is_expired() {
+                            names_cache.insert(key, entry);
+                        }
+                    }
+                    println!("Loaded {} game names from cache", names_cache.len());
+                }
+            }
+        }
+        
+        // Load game details cache
+        let details_path = self.cache_dir.join("game_details.json");
+        if details_path.exists() {
+            if let Ok(content) = fs::read_to_string(&details_path) {
+                if let Ok(cached_details) = serde_json::from_str::<HashMap<String, CacheEntry<GameDetail>>>(&content) {
+                    let mut details_cache = self.game_details.lock().unwrap();
+                    // Only load non-expired entries
+                    for (key, entry) in cached_details {
+                        if !entry.is_expired() {
+                            details_cache.insert(key, entry);
+                        }
+                    }
+                    println!("Loaded {} game details from cache", details_cache.len());
+                }
+            }
+        }
+    }
+    
+    fn clear_all(&self) {
+        // Clear in-memory cache
+        {
+            let mut details_cache = self.game_details.lock().unwrap();
+            details_cache.clear();
+        }
+        {
+            let mut names_cache = self.game_names.lock().unwrap();
+            names_cache.clear();
+        }
+        
+        // Clear disk cache
+        let _ = fs::remove_file(self.cache_dir.join("game_names.json"));
+        let _ = fs::remove_file(self.cache_dir.join("game_details.json"));
+        
+        println!("Cache cleared completely");
+    }
+    
+    fn queue_for_refresh(&self, app_id: String) {
+        let mut queue = self.request_queue.lock().unwrap();
+        if !queue.contains(&app_id) {
+            queue.push(app_id);
+        }
+    }
+    
+    async fn process_queue_batch(&self) {
+        // Check if already processing
+        {
+            let mut is_processing = self.is_processing_queue.lock().unwrap();
+            if *is_processing {
+                return;
+            }
+            *is_processing = true;
+        } // Drop lock before async operations
+        
+        // Process queue in batches
+        loop {
+            // Check circuit breaker
+            let is_circuit_open = {
+                *self.circuit_breaker_open.lock().unwrap()
+            };
+            
+            if is_circuit_open {
+                println!("Circuit breaker is open, pausing queue processing");
+                sleep(Duration::from_secs(30)).await; // Wait 30s before retry
+                self.try_close_circuit_breaker();
+                continue;
+            }
+            
+            // Get next batch (max 5 items)
+            let batch: Vec<String> = {
+                let mut queue = self.request_queue.lock().unwrap();
+                let batch_size = queue.len().min(5);
+                if batch_size == 0 {
+                    break; // Queue is empty
+                }
+                queue.drain(0..batch_size).collect()
+            };
+            
+            // Process batch with rate limiting
+            for app_id in batch {
+                self.throttle_request().await;
+                
+                // Fetch in background without blocking
+                let app_id_clone = app_id.clone();
+                tokio::spawn(async move {
+                    fetch_game_name_simple(&app_id_clone).await;
+                });
+                
+                // Extra delay between batch items
+                sleep(Duration::from_millis(100)).await;
+            }
+            
+            // Pause between batches
+            sleep(Duration::from_secs(2)).await;
+        }
+        
+        // Mark as not processing
+        {
+            *self.is_processing_queue.lock().unwrap() = false;
+        }
+    }
+    
+    fn open_circuit_breaker(&self) {
+        let mut is_open = self.circuit_breaker_open.lock().unwrap();
+        if !*is_open {
+            *is_open = true;
+            println!("⚠️ Circuit breaker opened - too many API failures");
+        }
+    }
+    
+    fn try_close_circuit_breaker(&self) {
+        let mut failures = self.circuit_breaker_failures.lock().unwrap();
+        if *failures > 0 {
+            *failures = (*failures).saturating_sub(1);
+            if *failures == 0 {
+                *self.circuit_breaker_open.lock().unwrap() = false;
+                println!("✅ Circuit breaker closed - resuming normal operation");
+            }
+        }
+    }
+    
+    fn check_circuit_breaker(&self) {
+        let failures = *self.circuit_breaker_failures.lock().unwrap();
+        if failures >= 5 {
+            self.open_circuit_breaker();
+        }
     }
 }
 
@@ -220,6 +490,7 @@ struct GameDetail {
     sysreq_rec: Vec<(String, String)>,
     pc_requirements: Option<PcRequirements>,
     dlc: Vec<String>, // List of DLC AppIDs
+    drm_notice: Option<String>, // DRM information from Steam API
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -673,18 +944,75 @@ async fn initialize_app() -> Result<Vec<InitProgress>, String> {
             completed: false,
         });
         
-        // Pre-fetch all game names with controlled concurrency
+        // Smart cache warming strategy
         if !app_ids.is_empty() {
-            let games: Vec<_> = stream::iter(app_ids.clone())
-                .map(|app_id| async move {
-                    fetch_game_name_simple(&app_id).await
-                })
-                .buffer_unordered(6) // Slightly lower concurrency for init
-                .collect()
-                .await;
+            let mut uncached_ids = Vec::new();
+            let mut cached_count = 0;
             
-            let loaded_count = games.iter().filter(|g| g.is_some()).count();
-            println!("Pre-loaded {} out of {} game names during initialization", loaded_count, app_ids.len());
+            for app_id in &app_ids {
+                if GAME_CACHE.get_game_name(app_id).await.is_none() {
+                    uncached_ids.push(app_id.clone());
+                } else {
+                    cached_count += 1;
+                }
+            }
+            
+            if cached_count > 0 {
+                println!("Found {} cached games - library will load instantly!", cached_count);
+            }
+            
+            if !uncached_ids.is_empty() {
+                // Strategy: Load most important games first, queue the rest
+                let priority_count = if uncached_ids.len() <= 5 {
+                    uncached_ids.len()
+                } else if uncached_ids.len() <= 15 {
+                    8
+                } else {
+                    12
+                };
+                
+                let (priority_ids, background_ids): (Vec<_>, Vec<_>) = 
+                    uncached_ids.into_iter().enumerate()
+                    .partition(|(i, _)| *i < priority_count);
+                
+                let priority_ids: Vec<_> = priority_ids.into_iter().map(|(_, id)| id).collect();
+                let background_ids: Vec<_> = background_ids.into_iter().map(|(_, id)| id).collect();
+                
+                println!("Cache warming: {} priority games (blocking), {} background games (queued)", 
+                         priority_ids.len(), background_ids.len());
+                
+                // Load priority games during initialization (blocking)
+                if !priority_ids.is_empty() {
+                    let games: Vec<_> = stream::iter(priority_ids)
+                        .map(|app_id| async move {
+                            fetch_game_name_simple(&app_id).await
+                        })
+                        .buffer_unordered(2) // Conservative concurrency for startup
+                        .collect()
+                        .await;
+                    
+                    let loaded_count = games.iter().filter(|g| g.is_some()).count();
+                    println!("✅ Pre-loaded {} priority games", loaded_count);
+                }
+                
+                // Queue remaining games for background processing
+                if !background_ids.is_empty() {
+                    for app_id in background_ids {
+                        GAME_CACHE.queue_for_refresh(app_id);
+                    }
+                    
+                    // Start background processing (non-blocking)
+                    tokio::spawn(async {
+                        // Small delay to let app finish initializing
+                        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                        GAME_CACHE.process_queue_batch().await;
+                    });
+                    
+                    println!("🔄 Background cache warming started");
+                }
+            } else {
+                println!("✨ All {} games already cached - instant loading!", app_ids.len());
+            }
         }
         
         app_ids.len()
@@ -746,32 +1074,134 @@ async fn get_library_games() -> Result<Vec<LibraryGame>, String> {
         }
     }
 
+    // Only log in debug mode
+    #[cfg(debug_assertions)]
     println!("Found {} games in library", app_ids.len());
 
-    // Process games with controlled concurrency (max 8 concurrent requests)
-    let mut games: Vec<LibraryGame> = stream::iter(app_ids)
-        .map(|app_id| async move {
-            // Fetch game name, fall back to AppID if not found
-            let name = fetch_game_name_simple(&app_id)
-                .await
-                .unwrap_or_else(|| format!("Unknown Game ({})", app_id));
-
-            LibraryGame {
+    // Instant loading strategy: prioritize cached data for immediate UX
+    let mut games = Vec::new();
+    let mut uncached_ids = Vec::new();
+    
+    println!("📚 Loading library: {} total games", app_ids.len());
+    
+    // First pass: load all cached games immediately (instant UX)
+    for app_id in &app_ids {
+        if let Some(cached_name) = GAME_CACHE.get_game_name(app_id).await {
+            games.push(LibraryGame {
                 app_id: app_id.clone(),
-                name,
+                name: cached_name,
+                header_image: header_image_for(app_id),
+            });
+        } else {
+            uncached_ids.push(app_id.clone());
+        }
+    }
+    
+    let cached_count = games.len();
+    println!("⚡ Instant load: {} cached games, {} need fetching", cached_count, uncached_ids.len());
+    
+    // If circuit breaker is open, just return cached games + placeholders
+    let is_circuit_open = {
+        *GAME_CACHE.circuit_breaker_open.lock().unwrap()
+    };
+    
+    if is_circuit_open {
+        println!("⚠️ Circuit breaker is open - returning cached games only");
+        for app_id in uncached_ids {
+            games.push(LibraryGame {
+                app_id: app_id.clone(),
+                name: format!("Game {}", app_id),
                 header_image: header_image_for(&app_id),
+            });
+        }
+    } else if !uncached_ids.is_empty() {
+        // Smart strategy: fetch critical games now, queue the rest
+        let critical_count = if cached_count > 10 {
+            // If we already have many cached games, fetch fewer immediately
+            uncached_ids.len().min(5)
+        } else {
+            // If cache is sparse, fetch more to improve initial UX
+            uncached_ids.len().min(12)
+        };
+        
+        let (critical_ids, background_ids): (Vec<_>, Vec<_>) = 
+            uncached_ids.into_iter().enumerate()
+            .partition(|(i, _)| *i < critical_count);
+        
+        let critical_ids: Vec<_> = critical_ids.into_iter().map(|(_, id)| id).collect();
+        let background_ids: Vec<_> = background_ids.into_iter().map(|(_, id)| id).collect();
+        
+        // Fetch critical games immediately
+        if !critical_ids.is_empty() {
+            println!("🔥 Fetching {} critical games immediately...", critical_ids.len());
+            
+            let batch_size = if critical_ids.len() > 8 { 2 } else { 3 };
+            
+            let mut fetched_games: Vec<LibraryGame> = stream::iter(critical_ids)
+                .map(|app_id| async move {
+                    let name = fetch_game_name_simple(&app_id)
+                        .await
+                        .unwrap_or_else(|| format!("Game {}", app_id));
+
+                    LibraryGame {
+                        app_id: app_id.clone(),
+                        name,
+                        header_image: header_image_for(&app_id),
+                    }
+                })
+                .buffer_unordered(batch_size)
+                .collect()
+                .await;
+                
+            games.append(&mut fetched_games);
+            println!("✅ Loaded {} critical games", fetched_games.len());
+        }
+        
+        // Queue background games for later processing
+        if !background_ids.is_empty() {
+            let background_count = background_ids.len();
+            
+            for app_id in &background_ids {
+                GAME_CACHE.queue_for_refresh(app_id.clone());
             }
-        })
-        .buffer_unordered(8) // Max 8 concurrent requests
-        .collect()
-        .await;
+            
+            // Add placeholders for background games (will be updated later)
+            for app_id in &background_ids {
+                games.push(LibraryGame {
+                    app_id: app_id.clone(),
+                    name: format!("Loading... ({})", &app_id[..6.min(app_id.len())]),
+                    header_image: header_image_for(app_id),
+                });
+            }
+            
+            // Trigger background processing
+            tokio::spawn(async {
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                GAME_CACHE.process_queue_batch().await;
+            });
+            
+            println!("🔄 Queued {} games for background loading", background_count);
+        }
+    }
 
     // Sort games by name alphabetically
     games.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
 
+    // Final summary
+    let total_games = games.len();
+    let loading_placeholders = games.iter()
+        .filter(|g| g.name.starts_with("Loading..."))
+        .count();
+    
+    if loading_placeholders > 0 {
+        println!("🎯 Library ready: {} games ({} instant, {} loading in background)", 
+                total_games, total_games - loading_placeholders, loading_placeholders);
+    } else {
+        println!("🎯 Library complete: {} games fully loaded", total_games);
+    }
+    
     // Final cache stats
     GAME_CACHE.cache_stats();
-    println!("Successfully processed {} games", games.len());
     Ok(games)
 }
 
@@ -863,10 +1293,68 @@ fn extract_appid_from_url(input: &str) -> Option<String> {
     None
 }
 
+async fn fetch_game_details_background(app_id: &str) -> Option<GameDetail> {
+    // Background refresh for game details (no user-facing errors)
+    let url = format!("https://store.steampowered.com/api/appdetails?appids={}", app_id);
+    
+    match HTTP_CLIENT.get(&url).send().await {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                match resp.json::<serde_json::Value>().await {
+                    Ok(v) => {
+                        if let Some(data) = v.get(app_id).and_then(|x| x.get("data")) {
+                            // Parse game detail (simplified for background refresh)
+                            let name = data.get("name").and_then(|x| x.as_str()).unwrap_or("").to_string();
+                            let header_image = header_image_for(app_id);
+                            let banner_image = data.get("background").and_then(|x| x.as_str())
+                                .or_else(|| data.get("background_raw").and_then(|x| x.as_str()))
+                                .unwrap_or(&header_image).to_string();
+                            
+                            let game_detail = GameDetail {
+                                app_id: app_id.to_string(),
+                                name,
+                                header_image,
+                                banner_image,
+                                detailed_description: data.get("detailed_description").and_then(|x| x.as_str()).unwrap_or("").to_string(),
+                                release_date: data.get("release_date").and_then(|x| x.get("date")).and_then(|x| x.as_str()).unwrap_or("").to_string(),
+                                publisher: data.get("publishers").and_then(|x| x.get(0)).and_then(|x| x.as_str()).unwrap_or("").to_string(),
+                                trailer: data.get("movies").and_then(|arr| arr.get(0)).and_then(|item| item.get("mp4")).and_then(|mp4| mp4.get("max")).and_then(|x| x.as_str()).map(|s| s.to_string()),
+                                screenshots: Vec::new(), // Skip screenshots for background refresh
+                                sysreq_min: Vec::new(),
+                                sysreq_rec: Vec::new(),
+                                pc_requirements: None,
+                                dlc: Vec::new(),
+                                drm_notice: data.get("drm_notice").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                            };
+                            
+                            // Cache the refreshed data
+                            GAME_CACHE.set_game_details(app_id.to_string(), game_detail.clone());
+                            return Some(game_detail);
+                        }
+                    }
+                    Err(_) => {}
+                }
+            }
+        }
+        Err(_) => {}
+    }
+    None
+}
+
 async fn fetch_game_name_simple(app_id: &str) -> Option<String> {
-    // Check cache first
+    // Check cache first (including stale-while-revalidate)
     if let Some(cached_name) = GAME_CACHE.get_game_name(app_id).await {
         return Some(cached_name);
+    }
+    
+    // Check circuit breaker
+    let is_circuit_open = {
+        *GAME_CACHE.circuit_breaker_open.lock().unwrap()
+    };
+    
+    if is_circuit_open {
+        // Return placeholder when circuit is open
+        return Some(format!("Game {}", app_id));
     }
     
     // Get or create a request lock for this app_id to prevent duplicate requests
@@ -883,19 +1371,47 @@ async fn fetch_game_name_simple(app_id: &str) -> Option<String> {
     GAME_CACHE.throttle_request().await;
     
     let url = format!("https://store.steampowered.com/api/appdetails?appids={}", app_id);
-    println!("Fetching game name from Steam API: {}", app_id);
+    // Minimal logging for game name fetch
+    #[cfg(debug_assertions)]
+    println!("Fetching game name: {}", app_id);
     
     let result = async {
-        let resp = HTTP_CLIENT.get(url).send().await.ok()?;
-    if !resp.status().is_success() { return None; }
-    let v: serde_json::Value = resp.json().await.ok()?;
-    let data = v.get(app_id)?.get("data")?;
-    let name = data.get("name")?.as_str().map(|s| s.to_string())?;
-    
-    // Cache the result
-    GAME_CACHE.set_game_name(app_id.to_string(), name.clone());
-    
-    Some(name)
+        match HTTP_CLIENT.get(url).send().await {
+            Ok(resp) => {
+                if !resp.status().is_success() {
+                    if resp.status().as_u16() == 429 {
+                        println!("Rate limited by Steam API (429)");
+                        GAME_CACHE.record_error();
+                    }
+                    return None;
+                }
+                
+                match resp.json::<serde_json::Value>().await {
+                    Ok(v) => {
+                        if let Some(data) = v.get(app_id).and_then(|x| x.get("data")) {
+                            if let Some(name) = data.get("name").and_then(|x| x.as_str()) {
+                                let name = name.to_string();
+                                // Cache the result
+                                GAME_CACHE.set_game_name(app_id.to_string(), name.clone());
+                                // Reset error count on success
+                                GAME_CACHE.reset_error_count();
+                                return Some(name);
+                            }
+                        }
+                        None
+                    }
+                    Err(e) => {
+                        println!("Failed to parse JSON: {}", e);
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                println!("Request failed: {}", e);
+                GAME_CACHE.record_error();
+                None
+            }
+        }
     }.await;
     
     // Clean up the request lock
@@ -915,12 +1431,51 @@ async fn get_game_details(app_id: String) -> Result<GameDetail, String> {
     GAME_CACHE.throttle_request().await;
     
     let url = format!("https://store.steampowered.com/api/appdetails?appids={}", app_id);
+    // Only log in debug mode and when not cached
+    #[cfg(debug_assertions)]
     println!("Fetching game details from Steam API: {}", app_id);
     
-    let resp = HTTP_CLIENT.get(&url).send().await.map_err(|e| e.to_string())?;
-    if !resp.status().is_success() { return Err(format!("status {}", resp.status())); }
+    let resp = match HTTP_CLIENT.get(&url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            GAME_CACHE.record_error();
+            return Err(format!("Request failed: {}", e));
+        }
+    };
+    
+    if !resp.status().is_success() {
+        if resp.status().as_u16() == 429 {
+            GAME_CACHE.record_error();
+            return Err("Rate limited by Steam API (429). Please wait before trying again.".to_string());
+        }
+        return Err(format!("status {}", resp.status()));
+    }
+    
     let v: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-    let data = v.get(&app_id).and_then(|x| x.get("data")).ok_or("no data")?;
+    
+    // Only log if there's an issue, not the full response
+    #[cfg(debug_assertions)]
+    if let Some(app_data) = v.get(&app_id) {
+        if let Some(success) = app_data.get("success").and_then(|s| s.as_bool()) {
+            if !success {
+                println!("Steam API returned success=false for app ID {}", app_id);
+            }
+        }
+    }
+    
+    // Check if the app exists and was successful
+    let app_data = v.get(&app_id).ok_or_else(|| format!("App ID {} not found in Steam API response", app_id))?;
+    
+    if let Some(success) = app_data.get("success").and_then(|s| s.as_bool()) {
+        if !success {
+            return Err(format!("Steam API returned success=false for app ID {} (game might not exist or be private)", app_id));
+        }
+    }
+    
+    let data = app_data.get("data").ok_or_else(|| format!("No data field for app ID {} (app might not exist or be private)", app_id))?;
+    
+    // Reset error count on successful request
+    GAME_CACHE.reset_error_count();
 
     let name = data.get("name").and_then(|x| x.as_str()).unwrap_or("").to_string();
     // Always use our consistent header image format instead of Steam API's variable quality images
@@ -973,6 +1528,9 @@ async fn get_game_details(app_id: String) -> Result<GameDetail, String> {
     // DLC will be loaded separately when needed (lazy loading)
     let dlc = Vec::new();
 
+    // Extract DRM notice
+    let drm_notice = data.get("drm_notice").and_then(|x| x.as_str()).map(|s| s.to_string());
+
     let game_detail = GameDetail {
         app_id: app_id.clone(),
         name,
@@ -987,6 +1545,7 @@ async fn get_game_details(app_id: String) -> Result<GameDetail, String> {
         sysreq_rec,
         pc_requirements,
         dlc,
+        drm_notice,
     };
     
     // Cache the result
@@ -1584,9 +2143,19 @@ async fn sync_dlcs_in_lua(main_app_id: String, dlc_ids_to_set: Vec<String>, adde
 
 #[command]
 async fn clear_cache() -> Result<String, String> {
-    GAME_CACHE.cleanup_expired();
+    GAME_CACHE.clear_all();
     Ok("Cache cleared successfully".to_string())
 }
+
+#[command]
+async fn refresh_cache_background() -> Result<String, String> {
+    // Trigger background cache refresh
+    tokio::spawn(async {
+        GAME_CACHE.process_queue_batch().await;
+    });
+    Ok("Background cache refresh started".to_string())
+}
+
 
 #[command]
 async fn remove_game(app_id: String) -> Result<DownloadResult, String> {
@@ -1680,6 +2249,7 @@ fn main() {
             get_dlcs_in_lua,
             sync_dlcs_in_lua,
             clear_cache,
+            refresh_cache_background,
             remove_game
         ])
         .run(tauri::generate_context!())
