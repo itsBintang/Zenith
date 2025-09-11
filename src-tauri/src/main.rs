@@ -939,8 +939,8 @@ async fn initialize_app() -> Result<Vec<InitProgress>, String> {
         }
         
         progress_steps.push(InitProgress {
-            step: format!("Pre-loading {} games...", app_ids.len()),
-            progress: 80.0,
+            step: format!("Pre-loading {} games (this ensures instant library access)...", app_ids.len()),
+            progress: 70.0,
             completed: false,
         });
         
@@ -962,13 +962,13 @@ async fn initialize_app() -> Result<Vec<InitProgress>, String> {
             }
             
             if !uncached_ids.is_empty() {
-                // Strategy: Load most important games first, queue the rest
-                let priority_count = if uncached_ids.len() <= 5 {
-                    uncached_ids.len()
-                } else if uncached_ids.len() <= 15 {
-                    8
+                // Strategy: Load more games during initialization when cache is invalid
+                let priority_count = if uncached_ids.len() <= 8 {
+                    uncached_ids.len() // Load all if small library
+                } else if uncached_ids.len() <= 20 {
+                    15 // Load 15 games for medium library
                 } else {
-                    12
+                    20 // Load 20 games for large library
                 };
                 
                 let (priority_ids, background_ids): (Vec<_>, Vec<_>) = 
@@ -983,16 +983,18 @@ async fn initialize_app() -> Result<Vec<InitProgress>, String> {
                 
                 // Load priority games during initialization (blocking)
                 if !priority_ids.is_empty() {
+                    println!("🔄 Loading {} games during initialization (this may take a moment)...", priority_ids.len());
+                    
                     let games: Vec<_> = stream::iter(priority_ids)
                         .map(|app_id| async move {
                             fetch_game_name_simple(&app_id).await
                         })
-                        .buffer_unordered(2) // Conservative concurrency for startup
+                        .buffer_unordered(4) // Increased concurrency for faster initialization
                         .collect()
                         .await;
                     
                     let loaded_count = games.iter().filter(|g| g.is_some()).count();
-                    println!("✅ Pre-loaded {} priority games", loaded_count);
+                    println!("✅ Pre-loaded {} priority games during initialization", loaded_count);
                 }
                 
                 // Queue remaining games for background processing
@@ -1021,7 +1023,7 @@ async fn initialize_app() -> Result<Vec<InitProgress>, String> {
     };
     
     progress_steps.push(InitProgress {
-        step: format!("Ready! {} games loaded", game_count),
+        step: format!("Ready! {} games pre-loaded for instant library access", game_count),
         progress: 100.0,
         completed: true,
     });
@@ -1115,13 +1117,16 @@ async fn get_library_games() -> Result<Vec<LibraryGame>, String> {
             });
         }
     } else if !uncached_ids.is_empty() {
-        // Smart strategy: fetch critical games now, queue the rest
-        let critical_count = if cached_count > 10 {
+        // Smart strategy: fetch more critical games when cache is invalid
+        let critical_count = if cached_count > 15 {
             // If we already have many cached games, fetch fewer immediately
-            uncached_ids.len().min(5)
+            uncached_ids.len().min(8)
+        } else if cached_count > 5 {
+            // Medium cache coverage, fetch moderate amount
+            uncached_ids.len().min(15)
         } else {
-            // If cache is sparse, fetch more to improve initial UX
-            uncached_ids.len().min(12)
+            // Low cache coverage, fetch more to reduce "Loading..." placeholders
+            uncached_ids.len().min(20)
         };
         
         let (critical_ids, background_ids): (Vec<_>, Vec<_>) = 
