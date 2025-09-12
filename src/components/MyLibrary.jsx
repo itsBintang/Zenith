@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { invoke } from '@tauri-apps/api/tauri';
+import { invoke } from '@tauri-apps/api/core';
 import { FiRefreshCw, FiPlay } from 'react-icons/fi';
 import { LibraryGameSkeleton } from './SkeletonLoader';
 import '../styles/MyLibrary.css';

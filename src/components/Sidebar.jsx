@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { FiHome, FiBox, FiDownload, FiSettings, FiRefreshCw } from "react-icons/fi";
-import { invoke } from "@tauri-apps/api/tauri";
+import { invoke } from "@tauri-apps/api/core";
 import logoImage from "../../logo.jpg";
 import MyLibrary from './MyLibrary'; // Assuming MyLibrary is in the same folder
 

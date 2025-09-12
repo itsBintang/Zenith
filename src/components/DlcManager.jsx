@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/tauri';
+import { invoke } from '@tauri-apps/api/core';
 import { FiX, FiLoader, FiChevronLeft, FiChevronRight, FiCheck, FiPlus, FiMinus } from 'react-icons/fi';
 import '../styles/DlcManager.css';
 
