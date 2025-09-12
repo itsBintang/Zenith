@@ -761,50 +761,60 @@
 
 /* Bypass Button */
 .game-details__bypass-button {
+  padding: 0.75rem 1rem;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(20px);
+  border-radius: 8px;
+  transition: all ease 0.2s;
+  cursor: pointer;
+  min-height: 40px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 20px;
-  background: linear-gradient(135deg, #ff6b35, #ff8c42);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(255, 107, 53, 0.3);
+  justify-content: center;
+  gap: 0.5rem;
+  color: #e0e0e0;
+  font-size: 0.9rem;
+  border: solid 1px rgba(255, 255, 255, 0.2);
+  box-shadow: 0px 0px 10px 0px rgba(0, 0, 0, 0.8);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  font-weight: 600;
 }
 
 .game-details__bypass-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(255, 107, 53, 0.4);
-  background: linear-gradient(135deg, #ff5722, #ff7043);
+  background-color: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .game-details__bypass-button.installing {
-  background: linear-gradient(135deg, #ffa726, #ffb74d);
+  background-color: rgba(255, 167, 38, 0.2);
+  border-color: rgba(255, 167, 38, 0.4);
+  color: #ffa726;
   cursor: not-allowed;
   animation: pulse 2s infinite;
 }
 
 .game-details__bypass-button.validating {
-  background: linear-gradient(135deg, #42a5f5, #64b5f6);
+  background-color: rgba(66, 165, 245, 0.2);
+  border-color: rgba(66, 165, 245, 0.4);
+  color: #42a5f5;
   cursor: not-allowed;
   animation: pulse 2s infinite;
 }
 
 .game-details__bypass-button.installed {
-  background: linear-gradient(135deg, #4caf50, #66bb6a);
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(20px);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #e0e0e0;
   cursor: pointer;
 }
 
 .game-details__bypass-button.installed:hover {
-  background: linear-gradient(135deg, #45a049, #5cb85c);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+  background-color: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .game-details__bypass-button:disabled {
@@ -1363,8 +1373,9 @@
   }
   
   .game-details__bypass-button {
-    padding: 10px 16px;
-    font-size: 13px;
+    padding: 0.6rem 0.8rem;
+    font-size: 0.8rem;
+    min-height: 36px;
   }
   
   .info-section,
