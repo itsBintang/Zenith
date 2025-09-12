@@ -756,3 +756,665 @@
 .content-sidebar::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
 }
+
+/* ====================== BYPASS STYLES ====================== */
+
+/* Bypass Button */
+.game-details__bypass-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #ff6b35, #ff8c42);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(255, 107, 53, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.game-details__bypass-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 107, 53, 0.4);
+  background: linear-gradient(135deg, #ff5722, #ff7043);
+}
+
+.game-details__bypass-button.installing {
+  background: linear-gradient(135deg, #ffa726, #ffb74d);
+  cursor: not-allowed;
+  animation: pulse 2s infinite;
+}
+
+.game-details__bypass-button.validating {
+  background: linear-gradient(135deg, #42a5f5, #64b5f6);
+  cursor: not-allowed;
+  animation: pulse 2s infinite;
+}
+
+.game-details__bypass-button.installed {
+  background: linear-gradient(135deg, #4caf50, #66bb6a);
+  cursor: pointer;
+}
+
+.game-details__bypass-button.installed:hover {
+  background: linear-gradient(135deg, #45a049, #5cb85c);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+}
+
+.game-details__bypass-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
+/* Spinner for installing state */
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+/* Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Bypass Confirmation Modal */
+.bypass-confirmation-modal {
+  background: linear-gradient(145deg, #1e1e2e, #2a2a3a);
+  padding: 32px;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  min-width: 450px;
+  max-width: 90vw;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  animation: slideUp 0.3s ease-out;
+}
+
+.confirmation-content {
+  text-align: center;
+}
+
+.bypass-icon {
+  font-size: 3.5rem;
+  color: #ff8c42;
+  margin-bottom: 16px;
+  animation: bounce 1s ease-in-out;
+}
+
+.confirmation-content h3 {
+  color: white;
+  margin: 0 0 16px 0;
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+.confirmation-message {
+  color: #ccc;
+  margin: 0 0 20px 0;
+  line-height: 1.6;
+  font-size: 15px;
+}
+
+.confirmation-message strong {
+  color: #ff8c42;
+  font-weight: 600;
+}
+
+.reinstall-note {
+  color: #ffb74d;
+  font-style: italic;
+}
+
+.confirmation-warning {
+  background: rgba(255, 152, 0, 0.1);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 16px 0 24px 0;
+}
+
+.confirmation-warning p {
+  color: #ffb74d;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.confirmation-warning strong {
+  color: #ff9800;
+}
+
+.confirmation-actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+
+.confirmation-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 120px;
+  justify-content: center;
+}
+
+.confirmation-button.primary {
+  background: linear-gradient(135deg, #ff6b35, #ff8c42);
+  color: white;
+  box-shadow: 0 4px 15px rgba(255, 107, 53, 0.3);
+}
+
+.confirmation-button.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 107, 53, 0.4);
+  background: linear-gradient(135deg, #ff5722, #ff7043);
+}
+
+.confirmation-button.secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ccc;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.confirmation-button.secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  transform: translateY(-1px);
+}
+
+/* Bypass Progress Modal */
+.bypass-progress-modal {
+  background: linear-gradient(145deg, #1e1e2e, #2a2a3a);
+  padding: 32px;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  min-width: 400px;
+  max-width: 90vw;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  animation: slideUp 0.3s ease-out;
+}
+
+.bypass-progress-modal h3 {
+  color: white;
+  margin: 0 0 24px 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.progress-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ff6b35, #ff8c42);
+  border-radius: 4px;
+  transition: width 0.5s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+.progress-text {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.progress-step {
+  color: #ccc;
+  margin: 0;
+  font-size: 14px;
+}
+
+.progress-percentage {
+  color: #ff8c42;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* Launch Game Popup */
+.launch-popup-modal {
+  background: linear-gradient(145deg, #1e1e2e, #2a2a3a);
+  border-radius: 20px;
+  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.6);
+  max-width: 600px;
+  width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  animation: slideUp 0.4s ease-out;
+}
+
+.launch-popup-content {
+  padding: 30px;
+  text-align: center;
+}
+
+.launch-icon {
+  font-size: 4rem;
+  color: #4caf50;
+  margin-bottom: 20px;
+  animation: bounce 1s ease-in-out;
+}
+
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-10px); }
+  60% { transform: translateY(-5px); }
+}
+
+.launch-popup-content h3 {
+  color: white;
+  margin: 0 0 16px 0;
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+.launch-popup-content p {
+  color: #ccc;
+  margin: 0 0 32px 0;
+  line-height: 1.6;
+  font-size: 15px;
+}
+
+.launch-popup-content strong {
+  color: #ff8c42;
+  font-weight: 600;
+}
+
+/* Launch Popup Info Section */
+.launch-popup-info {
+  margin: 24px 0;
+  text-align: left;
+}
+
+.info-section {
+  background: rgba(76, 175, 80, 0.1);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.info-section h4 {
+  color: #4caf50;
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.info-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.info-list li {
+  color: #e0e0e0;
+  margin: 8px 0;
+  padding: 8px 0;
+  font-size: 14px;
+  line-height: 1.5;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.info-list li:last-child {
+  border-bottom: none;
+}
+
+.info-list li strong {
+  color: #4caf50;
+  font-weight: 600;
+}
+
+.warning-section {
+  background: rgba(255, 152, 0, 0.1);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.warning-text {
+  color: #ffb74d;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.warning-text strong {
+  color: #ff9800;
+  font-weight: 600;
+}
+
+.launch-popup-question {
+  margin: 24px 0 16px 0;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.launch-popup-question h4 {
+  color: #fff;
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.question-subtitle {
+  color: #ccc;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  font-style: italic;
+}
+
+/* Executable List */
+.executable-list {
+  margin: 20px 0;
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.loading-executables {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  color: #ccc;
+  font-size: 14px;
+}
+
+.executable-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 16px 20px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-align: left;
+}
+
+.executable-item:last-child {
+  border-bottom: none;
+}
+
+.executable-item:hover {
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.executable-item.recommended {
+  background: rgba(76, 175, 80, 0.15);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  border-radius: 8px;
+  margin: 8px;
+  border-bottom: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.executable-item.recommended:hover {
+  background: rgba(76, 175, 80, 0.2);
+}
+
+.executable-info {
+  flex: 1;
+}
+
+.executable-name {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.recommended-badge {
+  font-size: 11px;
+  color: #4caf50;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.exe-name {
+  color: #fff;
+  font-weight: 500;
+  font-size: 15px;
+}
+
+.executable-size {
+  color: #888;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.launch-icon-small {
+  color: #4caf50;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.no-executables {
+  padding: 24px;
+  text-align: center;
+  color: #888;
+  font-style: italic;
+}
+
+.no-executables p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.launch-popup-actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+
+.launch-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 28px;
+  border: none;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 140px;
+  justify-content: center;
+}
+
+.launch-button.primary {
+  background: linear-gradient(135deg, #4caf50, #66bb6a);
+  color: white;
+  box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+}
+
+.launch-button.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+  background: linear-gradient(135deg, #45a049, #5cb85c);
+}
+
+.launch-button.secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ccc;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.launch-button.secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  transform: translateY(-1px);
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .bypass-progress-modal,
+  .launch-popup-modal,
+  .bypass-confirmation-modal {
+    margin: 10px;
+    min-width: unset;
+    max-height: 90vh;
+  }
+  
+  .launch-popup-content {
+    padding: 20px 16px;
+  }
+  
+  .launch-popup-actions {
+    flex-direction: column;
+  }
+  
+  .launch-button {
+    min-width: unset;
+    width: 100%;
+  }
+  
+  .game-details__bypass-button {
+    padding: 10px 16px;
+    font-size: 13px;
+  }
+  
+  .info-section,
+  .warning-section {
+    padding: 16px 12px;
+  }
+  
+  .info-list li {
+    font-size: 13px;
+    padding: 6px 0;
+  }
+  
+  .launch-popup-question h4 {
+    font-size: 16px;
+  }
+  
+  .executable-list {
+    max-height: 200px;
+  }
+  
+  .executable-item {
+    padding: 12px 16px;
+  }
+  
+  .executable-item.recommended {
+    margin: 6px;
+  }
+  
+  .exe-name {
+    font-size: 14px;
+  }
+  
+  .executable-size {
+    font-size: 12px;
+  }
+  
+  .confirmation-content {
+    padding: 24px 16px;
+  }
+  
+  .bypass-icon {
+    font-size: 3rem;
+  }
+  
+  .confirmation-actions {
+    flex-direction: column;
+  }
+  
+  .confirmation-button {
+    min-width: unset;
+    width: 100%;
+  }
+}
