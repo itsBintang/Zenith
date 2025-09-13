@@ -1,11 +1,11 @@
 {
     "platforms":  {
                       "windows-x86_64":  {
-                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSWDhEOU5Mb0sxWGVwMkhLOXJsYW4rbUxsYlBLVVhYVXRFTVY2OVNnNDFaL01jWmE4NGU5QWI3T2pRQkNjeEhBNmFtU09CUllQN0lqR09CWGp3S0dpZzFEZFhRRkNNMndJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzU3NzMyMTQ4CWZpbGU6WmVuaXRoIExhdW5jaGVyXzEuMC4wX3g2NC1zZXR1cC5leGUKM2trOC9BQkgzZ2xVUnpOb0hLbzZtREVhZUpYU3poV1c2TFNHVTBIdkZLclVwZWJKaTJ3c204cUJBMS9jME0rR3NtdEExSTZjbytMYStqK3JYSlVXQWc9PQo=",
-                                             "url":  "https://github.com/itsBintang/Zenith/releases/download/v1.0.0/Zenith.Launcher_1.0.0_x64-setup.exe"
+                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSWDhEOU5Mb0sxWFNXOENSTTV3QWJrY2h3d2dLc1hQTUlwRkkyWE9PTStFQUtQY2ZQejkxelhCY1BvU0hOMnFOSUhKTnVOdlJkT25DT2t4VFJVa1JqbjR2SVFGZGhzUWdVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzU3NzMzMDI3CWZpbGU6WmVuaXRoIExhdW5jaGVyXzEuMS4wX3g2NC1zZXR1cC5leGUKQ0hlMm1BRElUUDBSWkJnblpBci9CZ3F2NUgxbXBUTm01cUdPdm5hd3BadGJ4N2tiYUFuRzUyZFhvcVlRWENtZnpVclh1NDladStWSWVWWFpBQ09yQ3c9PQo=",
+                                             "url":  "https://github.com/itsBintang/Zenith/releases/download/v1.1.0/Zenith.Launcher_1.1.0_x64-setup.exe"
                                          }
                   },
-    "pub_date":  "2025-09-13T09:55:48Z",
-    "version":  "1.0.0",
-    "notes":  "Final release "
+    "pub_date":  "2025-09-13T10:10:27Z",
+    "version":  "1.1.0",
+    "notes":  "Minor"
 }

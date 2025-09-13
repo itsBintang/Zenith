@@ -132,34 +132,42 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  backdrop-filter: blur(8px);
 }
 
 .update-dialog {
-  background: #2a2a3a;
+  background: #1a1b1f;
   border-radius: 12px;
+  border: 1px solid #26272b;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
   max-width: 500px;
   width: 90%;
   overflow: hidden;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .update-dialog-header {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 20px;
-  background: rgba(33, 150, 243, 0.1);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 16px 20px;
+  background: #1f2023;
+  border-bottom: 1px solid #26272b;
 }
 
 .update-dialog-header svg {
-  font-size: 24px;
-  color: #2196F3;
+  font-size: 22px;
+  color: #c6c7cb;
 }
 
 .update-dialog-header h3 {
@@ -171,12 +179,17 @@
 
 .update-dialog-body {
   padding: 20px;
-  color: #ffffff;
+  color: #c6c7cb;
   line-height: 1.6;
 }
 
 .update-dialog-body p {
   margin: 0 0 12px 0;
+}
+
+.update-dialog-body p:first-child {
+  font-weight: 600;
+  color: #e9eaee;
 }
 
 .update-dialog-body p:last-child {
@@ -187,9 +200,9 @@
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  padding: 20px;
-  background: rgba(255, 255, 255, 0.05);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 16px 20px;
+  background: #111214;
+  border-top: 1px solid #26272b;
 }
 
 .btn-primary,
@@ -198,37 +211,38 @@
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
   border: none;
 }
 
 .btn-primary {
-  background: #2196F3;
+  background: #5865f2; /* A more modern blue */
   color: white;
 }
 
 .btn-primary:hover {
-  background: #1976D2;
+  background: #4752c4;
 }
 
 .btn-primary:disabled {
-  background: #555;
+  background: #2a2d31;
+  color: #6a6c72;
   cursor: not-allowed;
 }
 
 .btn-secondary {
-  background: transparent;
-  color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: #2a2d31;
+  color: #c6c7cb;
+  border: 1px solid #36393f;
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: #36393f;
+  border-color: #42464d;
 }
 
 /* Responsive */
