@@ -1,11 +1,11 @@
 {
     "platforms":  {
                       "windows-x86_64":  {
-                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSWDhEOU5Mb0sxWFNXOENSTTV3QWJrY2h3d2dLc1hQTUlwRkkyWE9PTStFQUtQY2ZQejkxelhCY1BvU0hOMnFOSUhKTnVOdlJkT25DT2t4VFJVa1JqbjR2SVFGZGhzUWdVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzU3NzMzMDI3CWZpbGU6WmVuaXRoIExhdW5jaGVyXzEuMS4wX3g2NC1zZXR1cC5leGUKQ0hlMm1BRElUUDBSWkJnblpBci9CZ3F2NUgxbXBUTm01cUdPdm5hd3BadGJ4N2tiYUFuRzUyZFhvcVlRWENtZnpVclh1NDladStWSWVWWFpBQ09yQ3c9PQo=",
-                                             "url":  "https://github.com/itsBintang/Zenith/releases/download/v1.1.0/Zenith.Launcher_1.1.0_x64-setup.exe"
+                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSWDhEOU5Mb0sxWFNMdmU2UWs2OEpOQzlxZXM3S1R1Rzd6MndaWm1uNnNBYnF5eFJkcG5LcjlZcnZvaEQ0QmFzRnBXQU80WjlXMitvSEU5ZWhHa0N1ZXZCWUtlN2g5cGdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzU3NzU0Mzg2CWZpbGU6WmVuaXRoIExhdW5jaGVyXzEuMy4wX3g2NC1zZXR1cC5leGUKaG9vRkZ2czF1TCtUblVKTFpwSkhnbGpRZzM5NFNKcGo1R2hsK25GTGI2TDJ4blg2SHd5YS9vaFpPU05KU1BCVEtpNW9kV2FKMEpnVzdJeDNPQUNqRFE9PQo=",
+                                             "url":  "https://github.com/itsBintang/Zenith/releases/download/v1.3.0/Zenith.Launcher_1.3.0_x64-setup.exe"
                                          }
                   },
-    "pub_date":  "2025-09-13T10:10:27Z",
-    "version":  "1.1.0",
-    "notes":  "Minor"
+    "pub_date":  "2025-09-13T16:06:26Z",
+    "version":  "1.3.0",
+    "notes":  "Fix Eror Bypass"
 }

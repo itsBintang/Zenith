@@ -5,6 +5,7 @@ import { FiArrowLeft, FiCloud, FiDownload, FiPlay, FiSettings, FiCheck, FiX, FiT
 import { GameDetailSkeleton } from "./SkeletonLoader";
 import DlcManager from "./DlcManager";
 import "../styles/GameDetail.css";
+import { isTauri } from '@tauri-apps/api/core';
 
 // Toast Notification Component
 function ToastNotification({ message, type, onClose }) {
@@ -292,16 +293,16 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
 
   const handleBypassClick = async () => {
     if (!detail || bypassStatus.validating || bypassStatus.installing) return;
-    
-    // Check if we're in Tauri environment
-    if (typeof window === 'undefined' || !window.__TAURI__) {
+  
+    const isRunningInTauri = await isTauri();
+    if (!isRunningInTauri) {
       setNotification({
         message: "Bypass is only available in desktop app",
         type: 'error'
       });
       return;
     }
-
+  
     // Start validation
     setBypassStatus(prev => ({ ...prev, validating: true }));
 
@@ -570,40 +571,33 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
                 Cloud save
               </button>
               
-              {/* Bypass Button - Only show if game is in library */}
-              {isInLibrary && (
-                <button 
-                  className={`game-details__bypass-button ${
-                    bypassStatus.installed ? 'installed' : ''
-                  } ${bypassStatus.installing ? 'installing' : ''} ${
-                    bypassStatus.validating ? 'validating' : ''
-                  }`}
-                  onClick={handleBypassClick}
-                  disabled={bypassStatus.installing || bypassStatus.validating}
-                >
-                  {bypassStatus.installing ? (
-                    <>
-                      <div className="spinner"></div>
-                      Installing Bypass...
-                    </>
-                  ) : bypassStatus.validating ? (
-                    <>
-                      <div className="spinner"></div>
-                      Checking Bypass...
-                    </>
-                  ) : bypassStatus.installed ? (
-                    <>
-                      <FiShield />
-                      REINSTALL BYPASS
-                    </>
-                  ) : (
-                    <>
-                      <FiShield />
-                      BYPASS
-                    </>
-                  )}
-                </button>
-              )}
+              {/* Universal Bypass Button */}
+              <button 
+                className={`game-details__bypass-button ${
+                  bypassStatus.installed ? 'installed' : ''
+                } ${bypassStatus.installing ? 'installing' : ''} ${
+                  bypassStatus.validating ? 'validating' : ''
+                }`}
+                onClick={handleBypassClick}
+                disabled={bypassStatus.installing || bypassStatus.validating}
+              >
+                {bypassStatus.installing ? (
+                  <>
+                    <div className="spinner"></div>
+                    Installing Bypass...
+                  </>
+                ) : bypassStatus.validating ? (
+                  <>
+                    <div className="spinner"></div>
+                    Checking Bypass...
+                  </>
+                ) : (
+                  <>
+                    <FiShield />
+                    BYPASS
+                  </>
+                )}
+              </button>
               
               {isInLibrary && (
                 <button 
