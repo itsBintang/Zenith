@@ -4,7 +4,7 @@ function FeaturedBanner({ onGameSelect }) {
   const featuredGame = {
     app_id: "2456740",
     title: "inZOI",
-    description: "Create your unique story by controlling and observing the lives of 'Zois'. Customize characters and build houses using inZOI's easy-to-use tools to live the life of your dreams and experience",
+    description: "Every life becomes a story&quot; Create your unique story by controlling and observing the lives of 'Zois'. Customize characters and build houses using inZOI's easy-to-use tools to live the life of your dreams and experience the different emotions of life created by its deep and detailed simulation.",
     banner_image: "https://cdn.akamai.steamstatic.com/steam/apps/2456740/library_hero.jpg"
   };
 

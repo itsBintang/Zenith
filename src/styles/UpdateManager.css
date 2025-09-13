@@ -44,8 +44,13 @@
 }
 
 .update-button.installed {
+  border-color: #81C784;
+  color: #A5D6A7;
+}
+
+.update-button.installed:hover {
+  background: rgba(76, 175, 80, 0.1);
   border-color: #4CAF50;
-  color: #4CAF50;
 }
 
 .update-button.error {
@@ -79,22 +84,25 @@
   left: 0;
   right: 0;
   margin-top: 8px;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
   z-index: 100;
+  backdrop-filter: blur(10px);
 }
 
 .update-message.idle {
-  background: rgba(76, 175, 80, 0.1);
-  color: #4CAF50;
-  border: 1px solid rgba(76, 175, 80, 0.3);
+  background: rgba(76, 175, 80, 0.15);
+  color: #81C784;
+  border: 1px solid rgba(76, 175, 80, 0.4);
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.1);
 }
 
 .update-message.installed {
-  background: rgba(76, 175, 80, 0.1);
-  color: #4CAF50;
-  border: 1px solid rgba(76, 175, 80, 0.3);
+  background: rgba(76, 175, 80, 0.15);
+  color: #81C784;
+  border: 1px solid rgba(76, 175, 80, 0.4);
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.1);
 }
 
 .update-error {
