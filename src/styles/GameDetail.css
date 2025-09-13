@@ -81,6 +81,40 @@
   border-color: rgba(255, 255, 255, 0.3);
 }
 
+/* Update Button */
+.game-details__update-button {
+  padding: 0.75rem 1rem;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(20px);
+  border-radius: 8px;
+  transition: all ease 0.2s;
+  cursor: pointer;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  color: #e0e0e0;
+  font-size: 0.9rem;
+  border: solid 1px rgba(255, 255, 255, 0.2);
+  box-shadow: 0px 0px 10px 0px rgba(0, 0, 0, 0.8);
+}
+
+.game-details__update-button:hover:not(:disabled) {
+  background-color: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.game-details__update-button.updating,
+.game-details__update-button:disabled {
+  background-color: rgba(66, 165, 245, 0.2);
+  border-color: rgba(66, 165, 245, 0.4);
+  color: #42a5f5;
+  cursor: not-allowed;
+  animation: pulse 2s infinite;
+}
+
 /* Hero Panel */
 .hero-panel {
   width: 100%;
@@ -984,6 +1018,92 @@
   max-width: 90vw;
   border: 1px solid rgba(255, 255, 255, 0.1);
   animation: slideUp 0.3s ease-out;
+}
+
+/* =================== New: Bypass Confirmation v2 styles =================== */
+/* Title tweaks */
+.bypass-confirmation-modal h3 {
+  color: #fff;
+  margin: 0 0 12px 0;
+  font-size: 1.7rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+/* Warning panel */
+.bypass-confirmation__warning {
+  background: rgba(255, 152, 0, 0.1);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin: 16px 0 24px 0;
+}
+
+.bypass-confirmation__warning p {
+  color: #ffb74d;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.bypass-confirmation__warning strong {
+  color: #ff9800;
+}
+
+/* Actions */
+.bypass-confirmation__actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+/* Buttons */
+.bypass-confirmation__confirm-button,
+.bypass-confirmation__cancel-button {
+  padding: 12px 22px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  min-width: 140px;
+  border: none;
+}
+
+.bypass-confirmation__confirm-button {
+  background: linear-gradient(135deg, #ff6b35, #ff8c42);
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(255, 107, 53, 0.25);
+}
+
+.bypass-confirmation__confirm-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(255, 107, 53, 0.32);
+  background: linear-gradient(135deg, #ff5a26, #ff7a33);
+}
+
+.bypass-confirmation__cancel-button {
+  background: rgba(255, 255, 255, 0.08);
+  color: #d0d0d0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.bypass-confirmation__cancel-button:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+@media (max-width: 768px) {
+  .bypass-confirmation__actions {
+    flex-direction: column;
+  }
+  .bypass-confirmation__confirm-button,
+  .bypass-confirmation__cancel-button {
+    width: 100%;
+    min-width: unset;
+  }
 }
 
 .bypass-progress-modal h3 {

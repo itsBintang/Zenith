@@ -1,15 +1,16 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod commands;
+mod models;
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io::{self, Cursor, Write};
+use std::io::{self, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
-use chrono;
 use futures::stream::{self, StreamExt};
 use regex::Regex;
 use std::process::Command;
@@ -19,6 +20,9 @@ use tempfile::TempDir;
 use tokio::time::sleep;
 use walkdir::WalkDir;
 use zip::ZipArchive;
+
+#[cfg(target_os = "windows")]
+use winreg::{enums::*, RegKey};
 
 fn sanitize_filename(name: &str) -> String {
     let mut out = String::with_capacity(name.len());
@@ -1170,7 +1174,7 @@ async fn initialize_app() -> Result<Vec<InitProgress>, String> {
                     );
 
                     let games: Vec<_> = stream::iter(priority_ids)
-                        .map(|app_id| async move { fetch_game_name_simple(&app_id).await })
+                        .map(|app_id: String| async move { fetch_game_name_simple(&app_id).await })
                         .buffer_unordered(4) // Increased concurrency for faster initialization
                         .collect()
                         .await;
@@ -1343,11 +1347,11 @@ async fn get_library_games() -> Result<Vec<LibraryGame>, String> {
             let batch_size = if critical_ids.len() > 8 { 2 } else { 3 };
 
             let mut fetched_games: Vec<LibraryGame> = stream::iter(critical_ids)
-                .map(|app_id| async move {
+                .map(|app_id: String| async move {
                     let name = fetch_game_name_simple(&app_id)
                         .await
                         .unwrap_or_else(|| format!("Game {}", app_id));
-
+                    
                     LibraryGame {
                         app_id: app_id.clone(),
                         name,
@@ -3568,7 +3572,8 @@ fn main() {
             confirm_and_launch_game,
             get_game_executables,
             check_for_updates,
-            install_update
+            install_update,
+            commands::update_game_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

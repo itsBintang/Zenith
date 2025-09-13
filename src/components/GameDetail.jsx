@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { FiArrowLeft, FiCloud, FiDownload, FiPlay, FiSettings, FiCheck, FiX, FiTrash2, FiPackage, FiShield } from "react-icons/fi";
+import { FiArrowLeft, FiCloud, FiDownload, FiPlay, FiSettings, FiCheck, FiX, FiTrash2, FiPackage, FiShield, FiRefreshCw } from "react-icons/fi";
 import { GameDetailSkeleton } from "./SkeletonLoader";
 import DlcManager from "./DlcManager";
 import "../styles/GameDetail.css";
@@ -188,6 +188,9 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
   const [gameExecutablePath, setGameExecutablePath] = useState(null);
   const [gameExecutables, setGameExecutables] = useState([]);
   const [loadingExecutables, setLoadingExecutables] = useState(false);
+ 
+  // Update related states
+  const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -240,8 +243,8 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
     
     const setupListener = async () => {
       try {
-        // Check if we're in Tauri environment
-        if (typeof window !== 'undefined' && window.__TAURI__) {
+        const isRunningInTauri = await isTauri();
+        if (isRunningInTauri) {
           unlistenFn = await listen('bypass_progress', (event) => {
             const progress = event.payload;
             if (progress.app_id === appId) {
@@ -342,13 +345,9 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
   const handleBypassConfirm = async () => {
     setShowBypassConfirmation(false);
     
-    const isReinstall = bypassStatus.installed;
-    const actionMessage = isReinstall ? "Reinstalling bypass..." : "Installing bypass...";
-    const successMessage = isReinstall ? "Bypass reinstalled successfully!" : "Bypass installed successfully!";
-
     setBypassStatus(prev => ({ ...prev, installing: true }));
     setShowBypassProgress(true);
-    setBypassProgress({ step: actionMessage, progress: 0 });
+    setBypassProgress({ step: "Installing bypass...", progress: 0 });
 
     try {
       const result = await invoke("install_bypass", { 
@@ -357,7 +356,7 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
 
       if (result && result.success) {
         setNotification({
-          message: successMessage,
+          message: "Bypass installed successfully!",
           type: 'success'
         });
         
@@ -375,7 +374,7 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
         }
       } else {
         setNotification({
-          message: `Bypass ${isReinstall ? 'reinstallation' : 'installation'} failed: ${result?.message || 'Unknown error'}`,
+          message: `Bypass installation failed: ${result?.message || 'Unknown error'}`,
           type: 'error'
         });
         setBypassStatus(prev => ({ ...prev, installing: false }));
@@ -383,7 +382,7 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
     } catch (error) {
       console.error("Bypass installation error:", error);
       setNotification({
-        message: `Failed to ${isReinstall ? 'reinstall' : 'install'} bypass: ${error}`,
+        message: `Failed to install bypass: ${error}`,
         type: 'error'
       });
       setBypassStatus(prev => ({ ...prev, installing: false }));
@@ -478,6 +477,36 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
     }
   };
 
+  const handleUpdateGame = async () => {
+    if (!detail || isUpdating) return;
+  
+    setIsUpdating(true);
+    setNotification({
+      message: `Searching for ${detail.name} updates...`,
+      type: 'info' // Or a different type for ongoing processes
+    });
+  
+    try {
+      const result = await invoke("update_game_files", { 
+        appId: detail.app_id,
+        gameName: detail.name 
+      });
+      
+      setNotification({
+        message: result, // Success or error message from backend
+        type: 'success'
+      });
+    } catch (error) {
+      console.error("Update error:", error);
+      setNotification({
+        message: `Update failed: ${error}`,
+        type: 'error'
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handleRemoveFromLibrary = async () => {
     if (!detail || isDownloading) return;
 
@@ -566,38 +595,55 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
           
           <div className="game-details__hero-controls">
             <div className="game-details__action-buttons">
-              <button className="game-details__cloud-sync-button">
-                <FiCloud />
-                Cloud save
-              </button>
+              {isInLibrary && (
+                <button 
+                  className={`game-details__update-button ${isUpdating ? 'updating' : ''}`}
+                  onClick={handleUpdateGame}
+                  disabled={isUpdating}
+                >
+                  {isUpdating ? (
+                    <>
+                      <div className="spinner"></div>
+                      Updating...
+                    </>
+                  ) : (
+                    <>
+                      <FiRefreshCw />
+                      Update
+                    </>
+                  )}
+                </button>
+              )}
               
-              {/* Universal Bypass Button */}
-              <button 
-                className={`game-details__bypass-button ${
-                  bypassStatus.installed ? 'installed' : ''
-                } ${bypassStatus.installing ? 'installing' : ''} ${
-                  bypassStatus.validating ? 'validating' : ''
-                }`}
-                onClick={handleBypassClick}
-                disabled={bypassStatus.installing || bypassStatus.validating}
-              >
-                {bypassStatus.installing ? (
-                  <>
-                    <div className="spinner"></div>
-                    Installing Bypass...
-                  </>
-                ) : bypassStatus.validating ? (
-                  <>
-                    <div className="spinner"></div>
-                    Checking Bypass...
-                  </>
-                ) : (
-                  <>
-                    <FiShield />
-                    BYPASS
-                  </>
-                )}
-              </button>
+              {/* Universal Bypass Button - Only show in library */}
+              {isInLibrary && (
+                <button 
+                  className={`game-details__bypass-button ${
+                    bypassStatus.installed ? 'installed' : ''
+                  } ${bypassStatus.installing ? 'installing' : ''} ${
+                    bypassStatus.validating ? 'validating' : ''
+                  }`}
+                  onClick={handleBypassClick}
+                  disabled={bypassStatus.installing || bypassStatus.validating}
+                >
+                  {bypassStatus.installing ? (
+                    <>
+                      <div className="spinner"></div>
+                      Installing Bypass...
+                    </>
+                  ) : bypassStatus.validating ? (
+                    <>
+                      <div className="spinner"></div>
+                      Checking Bypass...
+                    </>
+                  ) : (
+                    <>
+                      <FiShield />
+                      BYPASS
+                    </>
+                  )}
+                </button>
+              )}
               
               {isInLibrary && (
                 <button 
@@ -657,42 +703,27 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
             <div className="confirmation-content">
               <FiShield className="bypass-icon" />
               <h3>🎯 Bypass Available!</h3>
-              <p className="confirmation-message">
-                Bypass tersedia untuk <strong>{detail?.name}</strong>. 
-                {bypassStatus.installed ? (
-                  <>
-                    <br />
-                    <span className="reinstall-note">
-                      Bypass sudah terinstall sebelumnya. Mau reinstall bypass?
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <br />
-                    Mau install bypass untuk game ini?
-                  </>
-                )}
+              <p>
+                Bypass tersedia untuk <strong>{detail.name}</strong>.
+                Silakan konfirmasi untuk melanjutkan instalasi.
               </p>
-              
-              <div className="confirmation-warning">
-                <p>⚠️ <strong>Penting:</strong> Bypass akan replace file game. Pastikan game sudah diinstall dengan benar.</p>
+              <div className="bypass-confirmation__warning">
+                <p><strong>Penting:</strong> Bypass akan menimpa file game. Pastikan game sudah diinstal dengan benar.</p>
               </div>
-              
-              <div className="confirmation-actions">
-                <button 
-                  className="confirmation-button primary"
-                  onClick={handleBypassConfirm}
-                >
-                  <FiShield />
-                  {bypassStatus.installed ? 'Yes, Reinstall' : 'Yes, Install'}
-                </button>
-                <button 
-                  className="confirmation-button secondary"
-                  onClick={() => setShowBypassConfirmation(false)}
-                >
-                  Cancel
-                </button>
-              </div>
+            </div>
+            <div className="bypass-confirmation__actions">
+              <button 
+                className="bypass-confirmation__confirm-button" 
+                onClick={handleBypassConfirm}
+              >
+                Yes, Install
+              </button>
+              <button 
+                className="bypass-confirmation__cancel-button" 
+                onClick={() => setShowBypassConfirmation(false)}
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>
