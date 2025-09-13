@@ -3478,10 +3478,19 @@ async fn check_for_updates(app: tauri::AppHandle) -> Result<String, String> {
                 Ok(None) => {
                     Ok("No updates available".to_string())
                 }
-                Err(e) => Err(format!("Failed to check for updates: {}", e))
+                Err(e) => {
+                    let error_msg = e.to_string();
+                    if error_msg.contains("Could not fetch a valid release JSON") {
+                        Err("Update service temporarily unavailable. Please try again later.".to_string())
+                    } else if error_msg.contains("network") || error_msg.contains("connection") {
+                        Err("Unable to connect to update server. Please check your internet connection.".to_string())
+                    } else {
+                        Err(format!("Update check unavailable: {}", e))
+                    }
+                }
             }
         }
-        Err(e) => Err(format!("Updater not available: {}", e))
+        Err(e) => Err("Update service is not available at this time.".to_string())
     }
 }
 
@@ -3500,16 +3509,32 @@ async fn install_update(app: tauri::AppHandle) -> Result<String, String> {
                         }
                     ).await {
                         Ok(_) => Ok("Update installed successfully. Please restart the application.".to_string()),
-                        Err(e) => Err(format!("Failed to install update: {}", e))
+                        Err(e) => {
+                            let error_msg = e.to_string();
+                            if error_msg.contains("network") || error_msg.contains("download") {
+                                Err("Download failed. Please check your internet connection and try again.".to_string())
+                            } else {
+                                Err("Installation failed. Please try again or contact support.".to_string())
+                            }
+                        }
                     }
                 }
                 Ok(None) => {
                     Err("No updates available to install".to_string())
                 }
-                Err(e) => Err(format!("Failed to check for updates: {}", e))
+                Err(e) => {
+                    let error_msg = e.to_string();
+                    if error_msg.contains("Could not fetch a valid release JSON") {
+                        Err("Update service temporarily unavailable. Please try again later.".to_string())
+                    } else if error_msg.contains("network") || error_msg.contains("connection") {
+                        Err("Unable to connect to update server. Please check your internet connection.".to_string())
+                    } else {
+                        Err(format!("Update check unavailable: {}", e))
+                    }
+                }
             }
         }
-        Err(e) => Err(format!("Updater not available: {}", e))
+        Err(e) => Err("Update service is not available at this time.".to_string())
     }
 }
 

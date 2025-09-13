@@ -49,8 +49,13 @@
 }
 
 .update-button.error {
-  border-color: #f44336;
-  color: #f44336;
+  border-color: #ff9800;
+  color: #ffab40;
+}
+
+.update-button.error:hover {
+  background: rgba(255, 152, 0, 0.1);
+  border-color: #ffab40;
 }
 
 .update-text {
@@ -98,16 +103,18 @@
   left: 0;
   right: 0;
   margin-top: 8px;
-  padding: 8px 12px;
-  background: rgba(244, 67, 54, 0.1);
-  color: #f44336;
-  border: 1px solid rgba(244, 67, 54, 0.3);
-  border-radius: 6px;
-  font-size: 12px;
+  padding: 10px 14px;
+  background: rgba(255, 152, 0, 0.15);
+  color: #ffcc80;
+  border: 1px solid rgba(255, 152, 0, 0.4);
+  border-radius: 8px;
+  font-size: 13px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   z-index: 100;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.1);
 }
 
 /* Update Dialog */

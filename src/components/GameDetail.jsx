@@ -570,38 +570,40 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
                 Cloud save
               </button>
               
-              {/* Universal Bypass Button */}
-              <button 
-                className={`game-details__bypass-button ${
-                  bypassStatus.installed ? 'installed' : ''
-                } ${bypassStatus.installing ? 'installing' : ''} ${
-                  bypassStatus.validating ? 'validating' : ''
-                }`}
-                onClick={handleBypassClick}
-                disabled={bypassStatus.installing || bypassStatus.validating}
-              >
-                {bypassStatus.installing ? (
-                  <>
-                    <div className="spinner"></div>
-                    Installing Bypass...
-                  </>
-                ) : bypassStatus.validating ? (
-                  <>
-                    <div className="spinner"></div>
-                    Checking Bypass...
-                  </>
-                ) : bypassStatus.installed ? (
-                  <>
-                    <FiShield />
-                    REINSTALL BYPASS
-                  </>
-                ) : (
-                  <>
-                    <FiShield />
-                    BYPASS
-                  </>
-                )}
-              </button>
+              {/* Bypass Button - Only show if game is in library */}
+              {isInLibrary && (
+                <button 
+                  className={`game-details__bypass-button ${
+                    bypassStatus.installed ? 'installed' : ''
+                  } ${bypassStatus.installing ? 'installing' : ''} ${
+                    bypassStatus.validating ? 'validating' : ''
+                  }`}
+                  onClick={handleBypassClick}
+                  disabled={bypassStatus.installing || bypassStatus.validating}
+                >
+                  {bypassStatus.installing ? (
+                    <>
+                      <div className="spinner"></div>
+                      Installing Bypass...
+                    </>
+                  ) : bypassStatus.validating ? (
+                    <>
+                      <div className="spinner"></div>
+                      Checking Bypass...
+                    </>
+                  ) : bypassStatus.installed ? (
+                    <>
+                      <FiShield />
+                      REINSTALL BYPASS
+                    </>
+                  ) : (
+                    <>
+                      <FiShield />
+                      BYPASS
+                    </>
+                  )}
+                </button>
+              )}
               
               {isInLibrary && (
                 <button 

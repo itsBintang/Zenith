@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { FiDownload, FiRefreshCw, FiCheck, FiX, FiAlertCircle } from 'react-icons/fi';
 import '../styles/UpdateManager.css';
@@ -8,14 +8,17 @@ function UpdateManager() {
   const [updateMessage, setUpdateMessage] = useState('');
   const [showUpdateDialog, setShowUpdateDialog] = useState(false);
   const [error, setError] = useState('');
+  const timeoutRef = useRef(null);
 
-  // Auto-check for updates on component mount
-  useEffect(() => {
-    console.log('🔄 UpdateManager mounted, starting auto-check...');
-    checkForUpdates(false); // Silent check on startup
-  }, []);
+  // Removed auto-check on mount - updates now only checked when button is clicked
 
   const checkForUpdates = async (showResult = true) => {
+    // Clear any existing timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    
     setUpdateStatus('checking');
     setError('');
     
@@ -38,12 +41,37 @@ function UpdateManager() {
       }
     } catch (err) {
       setUpdateStatus('error');
-      setError(err.toString());
+      // Format error message for better user experience
+      const errorMessage = err.toString();
+      let userFriendlyMessage = errorMessage;
+      
+      if (errorMessage.includes('Could not fetch a valid release JSON')) {
+        userFriendlyMessage = 'Unable to connect to update server. Please check your internet connection and try again.';
+      } else if (errorMessage.includes('Failed to check for updates')) {
+        userFriendlyMessage = 'Update service is temporarily unavailable. Please try again later.';
+      } else if (errorMessage.includes('network')) {
+        userFriendlyMessage = 'Network connection error. Please check your internet connection.';
+      }
+      
+      setError(userFriendlyMessage);
       console.error('Update check failed:', err);
+      
+      // Auto close error message after 5 seconds
+      timeoutRef.current = setTimeout(() => {
+        setError('');
+        setUpdateStatus('idle');
+        timeoutRef.current = null;
+      }, 5000);
     }
   };
 
   const installUpdate = async () => {
+    // Clear any existing timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    
     setUpdateStatus('downloading');
     setError('');
     
@@ -62,8 +90,25 @@ function UpdateManager() {
       
     } catch (err) {
       setUpdateStatus('error');
-      setError(err.toString());
+      // Format error message for better user experience
+      const errorMessage = err.toString();
+      let userFriendlyMessage = errorMessage;
+      
+      if (errorMessage.includes('Failed to install update')) {
+        userFriendlyMessage = 'Installation failed. Please try again or download manually from our website.';
+      } else if (errorMessage.includes('network')) {
+        userFriendlyMessage = 'Download interrupted. Please check your internet connection and try again.';
+      }
+      
+      setError(userFriendlyMessage);
       console.error('Update installation failed:', err);
+      
+      // Auto close error message after 5 seconds
+      timeoutRef.current = setTimeout(() => {
+        setError('');
+        setUpdateStatus('idle');
+        timeoutRef.current = null;
+      }, 5000);
     }
   };
 
@@ -95,7 +140,7 @@ function UpdateManager() {
       case 'installed':
         return 'Update installed';
       case 'error':
-        return 'Update failed';
+        return 'Check failed';
       default:
         return 'Check for updates';
     }
