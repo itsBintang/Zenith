@@ -1,0 +1,11 @@
+{
+    "platforms":  {
+                      "windows-x86_64":  {
+                                             "signature":  "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSWDhEOU5Mb0sxWFlraDlhdEtOUllleEZyUHpnU2NtYWgwNFJOWDE4ZTdtQXYzTkNDT2xkMHJJZjVCaFBncnNVMUQvVXgrYmtLQXlHdHB3V2xvNWo4ektURytkNVFXT2dBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzU3Njk1NTQwCWZpbGU6WmVuaXRoIExhdW5jaGVyXzAuMS40X3g2NC1zZXR1cC5leGUKTmFzOVVRajNBVlVlWFhrQmxmYmEraVFOT3prMEdmSnlDdlNjNWg1NHdiUmJrRTJtbFU1TlpsN0hscWRkSUt1MHQrSzRIL3V4ODRZcDhrdzFVZE5PRGc9PQo=",
+                                             "url":  "https://github.com/itsBintang/Zenith/releases/download/v0.1.4/Zenith.Launcher_0.1.4_x64-setup.exe"
+                                         }
+                  },
+    "pub_date":  "2025-09-12T23:45:40Z",
+    "version":  "0.1.4",
+    "notes":  "Final release with working silent update"
+}

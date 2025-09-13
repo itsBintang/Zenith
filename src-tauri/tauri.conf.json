@@ -1,63 +1,81 @@
 {
-  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
-  "build": {
-    "beforeBuildCommand": "npm run build",
-    "beforeDevCommand": "npm run dev",
-    "frontendDist": "../dist",
-    "devUrl": "http://localhost:1420"
-  },
-  "bundle": {
-    "active": true,
-    "category": "Game",
-    "copyright": "",
-    "targets": "all",
-    "externalBin": [],
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ],
-    "windows": {
-      "certificateThumbprint": null,
-      "digestAlgorithm": "sha256",
-      "timestampUrl": ""
-    },
-    "longDescription": "Zenith Gaming Launcher - A modern Steam game launcher with advanced features and beautiful UI",
-    "macOS": {
-      "entitlements": null,
-      "exceptionDomain": "",
-      "frameworks": [],
-      "providerShortName": null,
-      "signingIdentity": null
-    },
-    "resources": [],
-    "shortDescription": "Modern Steam game launcher",
-    "linux": {
-      "deb": {
-        "depends": []
-      }
-    }
-  },
-  "productName": "Zenith Launcher",
-  "mainBinaryName": "Zenith Launcher",
-  "version": "0.1.0",
-  "identifier": "com.zenith.launcher",
-  "plugins": {},
-  "app": {
-    "windows": [
-      {
-        "fullscreen": false,
-        "height": 600,
-        "resizable": true,
-        "title": "Zenith",
-        "width": 800,
-        "useHttpsScheme": true
-      }
-    ],
-    "security": {
-      "csp": null
-    }
-  }
+    "$schema":  "../node_modules/@tauri-apps/cli/schema.json",
+    "build":  {
+                  "beforeBuildCommand":  "npm run build",
+                  "beforeDevCommand":  "npm run dev",
+                  "frontendDist":  "../dist",
+                  "devUrl":  "http://localhost:1420"
+              },
+    "bundle":  {
+                   "active":  true,
+                   "createUpdaterArtifacts":  true,
+                   "category":  "Game",
+                   "copyright":  "",
+                   "targets":  "all",
+                   "externalBin":  [
+
+                                   ],
+                   "icon":  [
+                                "icons/32x32.png",
+                                "icons/128x128.png",
+                                "icons/128x128@2x.png",
+                                "icons/icon.icns",
+                                "icons/icon.ico"
+                            ],
+                   "windows":  {
+                                   "certificateThumbprint":  null,
+                                   "digestAlgorithm":  "sha256",
+                                   "timestampUrl":  ""
+                               },
+                   "longDescription":  "Zenith Gaming Launcher - A modern Steam game launcher with advanced features and beautiful UI",
+                   "macOS":  {
+                                 "entitlements":  null,
+                                 "exceptionDomain":  "",
+                                 "frameworks":  [
+
+                                                ],
+                                 "providerShortName":  null,
+                                 "signingIdentity":  null
+                             },
+                   "resources":  [
+
+                                 ],
+                   "shortDescription":  "Modern Steam game launcher",
+                   "linux":  {
+                                 "deb":  {
+                                             "depends":  [
+
+                                                         ]
+                                         }
+                             }
+               },
+    "productName":  "Zenith Launcher",
+    "mainBinaryName":  "Zenith Launcher",
+    "version":  "0.1.4",
+    "identifier":  "com.zenith.launcher",
+    "plugins":  {
+                    "updater":  {
+                                    "active":  true,
+                                    "endpoints":  [
+                                                      "https://github.com/itsBintang/Zenith/releases/latest/download/latest.json"
+                                                  ],
+                                    "dialog":  false,
+                                    "pubkey":  "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVEQjU4MjJFNEQzRkYwNTcKUldSWDhEOU5Mb0sxWFNySjU0NU9sUU9kcU1xRDNVT0RYbXlNWU1jRTdHQWZRQ0ZuTHJ4SlNiQ00K"
+                                }
+                },
+    "app":  {
+                "windows":  [
+                                {
+                                    "fullscreen":  false,
+                                    "height":  600,
+                                    "resizable":  true,
+                                    "title":  "Zenith",
+                                    "width":  800,
+                                    "useHttpsScheme":  true
+                                }
+                            ],
+                "security":  {
+                                 "csp":  null
+                             }
+            }
 }

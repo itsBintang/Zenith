@@ -14,6 +14,7 @@ use futures::stream::{self, StreamExt};
 use regex::Regex;
 use std::process::Command;
 use tauri::{command, Emitter};
+use tauri_plugin_updater::UpdaterExt;
 use tempfile::TempDir;
 use tokio::time::sleep;
 use walkdir::WalkDir;
@@ -3462,9 +3463,62 @@ async fn launch_game_executable(executable_path: String) -> Result<String, Strin
 
 // ====================== END BYPASS FUNCTIONS ======================
 
+// ====================== UPDATER FUNCTIONS ======================
+
+#[command]
+async fn check_for_updates(app: tauri::AppHandle) -> Result<String, String> {
+    match app.updater() {
+        Ok(updater) => {
+            match updater.check().await {
+                Ok(Some(update)) => {
+                    Ok(format!("Update available: {} -> {}", 
+                        update.current_version, 
+                        update.version))
+                }
+                Ok(None) => {
+                    Ok("No updates available".to_string())
+                }
+                Err(e) => Err(format!("Failed to check for updates: {}", e))
+            }
+        }
+        Err(e) => Err(format!("Updater not available: {}", e))
+    }
+}
+
+#[command]
+async fn install_update(app: tauri::AppHandle) -> Result<String, String> {
+    match app.updater() {
+        Ok(updater) => {
+            match updater.check().await {
+                Ok(Some(update)) => {
+                    match update.download_and_install(
+                        |_chunk_length, _content_length| {
+                            // Progress callback - bisa ditambahkan emit event ke frontend
+                        },
+                        || {
+                            // Download finished callback
+                        }
+                    ).await {
+                        Ok(_) => Ok("Update installed successfully. Please restart the application.".to_string()),
+                        Err(e) => Err(format!("Failed to install update: {}", e))
+                    }
+                }
+                Ok(None) => {
+                    Err("No updates available to install".to_string())
+                }
+                Err(e) => Err(format!("Failed to check for updates: {}", e))
+            }
+        }
+        Err(e) => Err(format!("Updater not available: {}", e))
+    }
+}
+
+// ====================== END UPDATER FUNCTIONS ======================
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             greet,
             download_game,
@@ -3487,7 +3541,9 @@ fn main() {
             install_bypass,
             launch_game_executable,
             confirm_and_launch_game,
-            get_game_executables
+            get_game_executables,
+            check_for_updates,
+            install_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

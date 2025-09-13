@@ -91,3 +91,16 @@ coverage/
 # Temporary files
 *.tmp
 *.temp
+
+# Updater Security
+# NEVER COMMIT PRIVATE KEYS!
+*.key
+private.key
+updater-private.key
+minisign.key
+*.sec
+
+# Release output (temporary build files)
+release-output/
+# Allow latest.json in root for GitHub releases
+!latest.json

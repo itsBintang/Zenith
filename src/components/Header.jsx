@@ -1,5 +1,6 @@
 import React from "react";
 import { FiSearch } from "react-icons/fi";
+import UpdateManager from "./UpdateManager";
 
 function Header() {
   return (
@@ -11,6 +12,7 @@ function Header() {
           <FiSearch size={18} />
           <input placeholder="Search games" />
         </div>
+        <UpdateManager />
       </div>
     </header>
   );
