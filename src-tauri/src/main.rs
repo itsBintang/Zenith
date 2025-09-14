@@ -3,6 +3,7 @@
 
 mod commands;
 mod models;
+mod database;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -72,445 +73,14 @@ struct BypassResult {
     game_executable_path: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct CacheEntry<T> {
-    data: T,
-    timestamp: u64,
-    expires_at: u64,
-}
-
-impl<T> CacheEntry<T> {
-    fn new(data: T, ttl_seconds: u64) -> Self {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        Self {
-            data,
-            timestamp: now,
-            expires_at: now + ttl_seconds,
-        }
-    }
-
-    fn is_expired(&self) -> bool {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        now > self.expires_at
-    }
-}
-
-struct GameCache {
-    game_details: Arc<Mutex<HashMap<String, CacheEntry<GameDetail>>>>,
-    game_names: Arc<Mutex<HashMap<String, CacheEntry<String>>>>,
-    in_flight_requests: Arc<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>>,
-    last_request_time: Arc<Mutex<u64>>,
-    request_delay_ms: u64,
-    cache_dir: PathBuf,
-    consecutive_errors: Arc<Mutex<u32>>,
-    last_error_time: Arc<Mutex<u64>>,
-    request_queue: Arc<Mutex<Vec<String>>>,
-    is_processing_queue: Arc<Mutex<bool>>,
-    circuit_breaker_open: Arc<Mutex<bool>>,
-    circuit_breaker_failures: Arc<Mutex<u32>>,
-}
-
-impl GameCache {
-    fn new() -> Self {
-        // Create cache directory in app data folder
-        let cache_dir = dirs::data_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("zenith-launcher")
-            .join("cache");
-
-        // Ensure cache directory exists
-        let _ = fs::create_dir_all(&cache_dir);
-
-        let mut instance = Self {
-            game_details: Arc::new(Mutex::new(HashMap::new())),
-            game_names: Arc::new(Mutex::new(HashMap::new())),
-            in_flight_requests: Arc::new(Mutex::new(HashMap::new())),
-            last_request_time: Arc::new(Mutex::new(0)),
-            request_delay_ms: 200, // Increased to 200ms between requests for safety
-            cache_dir: cache_dir.clone(),
-            consecutive_errors: Arc::new(Mutex::new(0)),
-            last_error_time: Arc::new(Mutex::new(0)),
-            request_queue: Arc::new(Mutex::new(Vec::new())),
-            is_processing_queue: Arc::new(Mutex::new(false)),
-            circuit_breaker_open: Arc::new(Mutex::new(false)),
-            circuit_breaker_failures: Arc::new(Mutex::new(0)),
-        };
-
-        // Load cache from disk
-        instance.load_from_disk();
-
-        instance
-    }
-
-    async fn get_game_details(&self, app_id: &str) -> Option<GameDetail> {
-        let cache = self.game_details.lock().unwrap();
-        if let Some(entry) = cache.get(app_id) {
-            if !entry.is_expired() {
-                return Some(entry.data.clone());
-            } else {
-                // Return stale data while revalidating in background
-                let stale_data = entry.data.clone();
-                drop(cache);
-
-                // Queue for background refresh (game details)
-                let app_id_clone = app_id.to_string();
-                tokio::spawn(async move {
-                    // Refresh in background
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                    let _ = fetch_game_details_background(&app_id_clone).await;
-                });
-
-                return Some(stale_data);
-            }
-        }
-        None
-    }
-
-    fn set_game_details(&self, app_id: String, details: GameDetail) {
-        let mut cache = self.game_details.lock().unwrap();
-        cache.insert(app_id.clone(), CacheEntry::new(details, 86400)); // 1 day TTL
-        drop(cache); // Release lock before saving
-        self.save_to_disk();
-
-        // Only log in debug mode
-        #[cfg(debug_assertions)]
-        println!("Cached game details for {}", app_id);
-    }
-
-    async fn get_game_name(&self, app_id: &str) -> Option<String> {
-        let cache = self.game_names.lock().unwrap();
-        if let Some(entry) = cache.get(app_id) {
-            if !entry.is_expired() {
-                return Some(entry.data.clone());
-            } else {
-                // Return stale data while revalidating in background
-                let stale_data = entry.data.clone();
-                drop(cache);
-
-                // Queue for background refresh
-                self.queue_for_refresh(app_id.to_string());
-
-                // Return stale data immediately (stale-while-revalidate)
-                return Some(stale_data);
-            }
-        }
-        None
-    }
-
-    fn set_game_name(&self, app_id: String, name: String) {
-        let mut cache = self.game_names.lock().unwrap();
-        cache.insert(app_id.clone(), CacheEntry::new(name.clone(), 604800)); // 7 days TTL
-        drop(cache); // Release lock before saving
-        self.save_to_disk();
-
-        // Only log in debug mode
-        #[cfg(debug_assertions)]
-        println!("Cached game name for {}: {}", app_id, name);
-    }
-
-    async fn get_or_create_request_lock(&self, app_id: &str) -> Arc<tokio::sync::Mutex<()>> {
-        let mut in_flight = self.in_flight_requests.lock().unwrap();
-        if let Some(lock) = in_flight.get(app_id) {
-            lock.clone()
-        } else {
-            let lock = Arc::new(tokio::sync::Mutex::new(()));
-            in_flight.insert(app_id.to_string(), lock.clone());
-            lock
-        }
-    }
-
-    fn remove_request_lock(&self, app_id: &str) {
-        let mut in_flight = self.in_flight_requests.lock().unwrap();
-        in_flight.remove(app_id);
-    }
-
-    async fn throttle_request(&self) {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64;
-
-        // Calculate delay with exponential backoff
-        let delay = {
-            let mut last_request = self.last_request_time.lock().unwrap();
-            let consecutive_errors = self.consecutive_errors.lock().unwrap();
-
-            // Handle case where last_request might be 0 or greater than now
-            let time_since_last = if *last_request > now || *last_request == 0 {
-                // First request or clock issue - no delay needed
-                0
-            } else {
-                now - *last_request
-            };
-
-            // Base delay with exponential backoff based on consecutive errors
-            let base_delay = self.request_delay_ms;
-            let backoff_multiplier = 2_u64.pow((*consecutive_errors).min(5)); // Cap at 2^5 = 32x
-            let required_delay = base_delay * backoff_multiplier;
-
-            if time_since_last < required_delay {
-                let delay = required_delay.saturating_sub(time_since_last);
-                // Update the last request time now to prevent race conditions
-                *last_request = now + delay;
-                Some(delay)
-            } else {
-                *last_request = now;
-                None
-            }
-        }; // Lock is dropped here
-
-        if let Some(delay_ms) = delay {
-            // Only log significant delays
-            if delay_ms > 500 {
-                println!("Rate limiting: waiting {}ms before next request", delay_ms);
-            }
-            sleep(Duration::from_millis(delay_ms)).await;
-        }
-    }
-
-    fn record_error(&self) {
-        let mut consecutive_errors = self.consecutive_errors.lock().unwrap();
-        *consecutive_errors += 1;
-
-        let mut last_error_time = self.last_error_time.lock().unwrap();
-        *last_error_time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
-        // Increment circuit breaker failures
-        let mut cb_failures = self.circuit_breaker_failures.lock().unwrap();
-        *cb_failures += 1;
-        drop(cb_failures);
-
-        println!(
-            "API error recorded. Consecutive errors: {}",
-            *consecutive_errors
-        );
-
-        // Check if we should open circuit breaker
-        self.check_circuit_breaker();
-    }
-
-    fn reset_error_count(&self) {
-        let mut consecutive_errors = self.consecutive_errors.lock().unwrap();
-        if *consecutive_errors > 0 {
-            println!("Resetting error count from {}", *consecutive_errors);
-            *consecutive_errors = 0;
-        }
-    }
-
-    fn cleanup_expired(&self) {
-        // Clean up expired entries
-        let mut details_cache = self.game_details.lock().unwrap();
-        let details_before = details_cache.len();
-        details_cache.retain(|_, entry| !entry.is_expired());
-        let details_after = details_cache.len();
-
-        let mut names_cache = self.game_names.lock().unwrap();
-        let names_before = names_cache.len();
-        names_cache.retain(|_, entry| !entry.is_expired());
-        let names_after = names_cache.len();
-
-        // Only log if something was actually cleaned
-        if details_before != details_after || names_before != names_after {
-            println!(
-                "Cache cleanup: Details {}->{}, Names {}->{}",
-                details_before, details_after, names_before, names_after
-            );
-        }
-    }
-
-    fn cache_stats(&self) {
-        let details_cache = self.game_details.lock().unwrap();
-        let names_cache = self.game_names.lock().unwrap();
-        let in_flight = self.in_flight_requests.lock().unwrap();
-
-        println!(
-            "Cache stats: {} game details, {} game names, {} in-flight requests",
-            details_cache.len(),
-            names_cache.len(),
-            in_flight.len()
-        );
-    }
-
-    fn save_to_disk(&self) {
-        // Save game names cache
-        let names_cache = self.game_names.lock().unwrap();
-        if !names_cache.is_empty() {
-            let names_path = self.cache_dir.join("game_names.json");
-            if let Ok(json) = serde_json::to_string(&*names_cache) {
-                let _ = fs::write(names_path, json);
-            }
-        }
-        drop(names_cache);
-
-        // Save game details cache
-        let details_cache = self.game_details.lock().unwrap();
-        if !details_cache.is_empty() {
-            let details_path = self.cache_dir.join("game_details.json");
-            if let Ok(json) = serde_json::to_string(&*details_cache) {
-                let _ = fs::write(details_path, json);
-            }
-        }
-    }
-
-    fn load_from_disk(&mut self) {
-        // Load game names cache
-        let names_path = self.cache_dir.join("game_names.json");
-        if names_path.exists() {
-            if let Ok(content) = fs::read_to_string(&names_path) {
-                if let Ok(cached_names) =
-                    serde_json::from_str::<HashMap<String, CacheEntry<String>>>(&content)
-                {
-                    let mut names_cache = self.game_names.lock().unwrap();
-                    // Only load non-expired entries
-                    for (key, entry) in cached_names {
-                        if !entry.is_expired() {
-                            names_cache.insert(key, entry);
-                        }
-                    }
-                    println!("Loaded {} game names from cache", names_cache.len());
-                }
-            }
-        }
-
-        // Load game details cache
-        let details_path = self.cache_dir.join("game_details.json");
-        if details_path.exists() {
-            if let Ok(content) = fs::read_to_string(&details_path) {
-                if let Ok(cached_details) =
-                    serde_json::from_str::<HashMap<String, CacheEntry<GameDetail>>>(&content)
-                {
-                    let mut details_cache = self.game_details.lock().unwrap();
-                    // Only load non-expired entries
-                    for (key, entry) in cached_details {
-                        if !entry.is_expired() {
-                            details_cache.insert(key, entry);
-                        }
-                    }
-                    println!("Loaded {} game details from cache", details_cache.len());
-                }
-            }
-        }
-    }
-
-    fn clear_all(&self) {
-        // Clear in-memory cache
-        {
-            let mut details_cache = self.game_details.lock().unwrap();
-            details_cache.clear();
-        }
-        {
-            let mut names_cache = self.game_names.lock().unwrap();
-            names_cache.clear();
-        }
-
-        // Clear disk cache
-        let _ = fs::remove_file(self.cache_dir.join("game_names.json"));
-        let _ = fs::remove_file(self.cache_dir.join("game_details.json"));
-
-        println!("Cache cleared completely");
-    }
-
-    fn queue_for_refresh(&self, app_id: String) {
-        let mut queue = self.request_queue.lock().unwrap();
-        if !queue.contains(&app_id) {
-            queue.push(app_id);
-        }
-    }
-
-    async fn process_queue_batch(&self) {
-        // Check if already processing
-        {
-            let mut is_processing = self.is_processing_queue.lock().unwrap();
-            if *is_processing {
-                return;
-            }
-            *is_processing = true;
-        } // Drop lock before async operations
-
-        // Process queue in batches
-        loop {
-            // Check circuit breaker
-            let is_circuit_open = { *self.circuit_breaker_open.lock().unwrap() };
-
-            if is_circuit_open {
-                println!("Circuit breaker is open, pausing queue processing");
-                sleep(Duration::from_secs(30)).await; // Wait 30s before retry
-                self.try_close_circuit_breaker();
-                continue;
-            }
-
-            // Get next batch (max 5 items)
-            let batch: Vec<String> = {
-                let mut queue = self.request_queue.lock().unwrap();
-                let batch_size = queue.len().min(5);
-                if batch_size == 0 {
-                    break; // Queue is empty
-                }
-                queue.drain(0..batch_size).collect()
-            };
-
-            // Process batch with rate limiting
-            for app_id in batch {
-                self.throttle_request().await;
-
-                // Fetch in background without blocking
-                let app_id_clone = app_id.clone();
-                tokio::spawn(async move {
-                    fetch_game_name_simple(&app_id_clone).await;
-                });
-
-                // Extra delay between batch items
-                sleep(Duration::from_millis(100)).await;
-            }
-
-            // Pause between batches
-            sleep(Duration::from_secs(2)).await;
-        }
-
-        // Mark as not processing
-        {
-            *self.is_processing_queue.lock().unwrap() = false;
-        }
-    }
-
-    fn open_circuit_breaker(&self) {
-        let mut is_open = self.circuit_breaker_open.lock().unwrap();
-        if !*is_open {
-            *is_open = true;
-            println!("⚠️ Circuit breaker opened - too many API failures");
-        }
-    }
-
-    fn try_close_circuit_breaker(&self) {
-        let mut failures = self.circuit_breaker_failures.lock().unwrap();
-        if *failures > 0 {
-            *failures = (*failures).saturating_sub(1);
-            if *failures == 0 {
-                *self.circuit_breaker_open.lock().unwrap() = false;
-                println!("✅ Circuit breaker closed - resuming normal operation");
-            }
-        }
-    }
-
-    fn check_circuit_breaker(&self) {
-        let failures = *self.circuit_breaker_failures.lock().unwrap();
-        if failures >= 5 {
-            self.open_circuit_breaker();
-        }
-    }
-}
+// Old GameCache struct and CacheEntry removed - now using SQLite with granular TTL
+// All caching is now handled by database::legacy_adapter::LegacyGameCacheAdapter
 
 lazy_static::lazy_static! {
-    static ref GAME_CACHE: GameCache = GameCache::new();
+    static ref GAME_CACHE: database::legacy_adapter::LegacyGameCacheAdapter = {
+        database::legacy_adapter::LegacyGameCacheAdapter::new()
+            .expect("Failed to initialize SQLite game cache")
+    };
     static ref HTTP_CLIENT: reqwest::Client = {
         reqwest::Client::builder()
             .user_agent("zenith-launcher/1.0")
@@ -1076,20 +646,40 @@ async fn initialize_app() -> Result<Vec<InitProgress>, String> {
         }
     }
 
-    // Step 2: Initialize cache system
+    // Step 2: Initialize cache system and run migration
     progress_steps.push(InitProgress {
-        step: "Initializing cache system...".to_string(),
-        progress: 60.0,
+        step: "Initializing SQLite cache system...".to_string(),
+        progress: 50.0,
         completed: false,
     });
+
+    // Run auto-migration from JSON to SQLite if needed
+    match database::migration_utils::auto_migrate_if_needed() {
+        Ok(Some(result)) => {
+            println!("✅ Migration completed: {} game names, {} game details", 
+                     result.game_names_migrated, result.game_details_migrated);
+            progress_steps.push(InitProgress {
+                step: format!("Migrated {} games from JSON to SQLite", 
+                            result.game_names_migrated + result.game_details_migrated),
+                progress: 65.0,
+                completed: true,
+            });
+        }
+        Ok(None) => {
+            println!("✅ SQLite cache ready (no migration needed)");
+        }
+        Err(e) => {
+            println!("⚠️  Migration failed, using fallback: {}", e);
+        }
+    }
 
     // Cleanup any expired cache entries
     GAME_CACHE.cleanup_expired();
     GAME_CACHE.cache_stats();
 
     progress_steps.push(InitProgress {
-        step: "Cache system ready".to_string(),
-        progress: 80.0,
+        step: "SQLite cache system ready".to_string(),
+        progress: 75.0,
         completed: true,
     });
 
@@ -1311,7 +901,7 @@ async fn get_library_games() -> Result<Vec<LibraryGame>, String> {
     );
 
     // If circuit breaker is open, just return cached games + placeholders
-    let is_circuit_open = { *GAME_CACHE.circuit_breaker_open.lock().unwrap() };
+    let is_circuit_open = GAME_CACHE.is_circuit_breaker_open().await;
 
     if is_circuit_open {
         println!("⚠️ Circuit breaker is open - returning cached games only");
@@ -1607,7 +1197,7 @@ async fn fetch_game_name_simple(app_id: &str) -> Option<String> {
     }
 
     // Check circuit breaker
-    let is_circuit_open = { *GAME_CACHE.circuit_breaker_open.lock().unwrap() };
+    let is_circuit_open = GAME_CACHE.is_circuit_breaker_open().await;
 
     if is_circuit_open {
         // Return placeholder when circuit is open
@@ -3620,7 +3210,19 @@ fn main() {
             get_game_executables,
             check_for_updates,
             install_update,
-            commands::update_game_files
+            commands::update_game_files,
+            // SQLite Database Management Commands
+            database::commands::migrate_json_to_sqlite,
+            database::commands::get_migration_status,
+            database::commands::get_database_stats,
+            database::commands::cleanup_expired_cache,
+            database::commands::vacuum_database,
+            database::commands::test_sqlite_connection,
+            database::commands::restore_json_backup,
+            // Safe Batch Processing Commands
+            database::commands::batch_refresh_games,
+            database::commands::smart_refresh_library,
+            database::commands::get_cache_config
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

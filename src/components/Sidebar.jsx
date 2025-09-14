@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import logoImage from "../../logo.jpg";
 import MyLibrary from './MyLibrary'; // Assuming MyLibrary is in the same folder
 
-function Sidebar({ active = "home", onNavigate, onGameSelect }) {
+function Sidebar({ active = "home", onNavigate, onGameSelect, onProfileClick, libraryState, onRefreshLibrary, onUpdateFilter }) {
   const [isRestarting, setIsRestarting] = useState(false);
   const [notification, setNotification] = useState(null);
 
@@ -48,7 +48,7 @@ function Sidebar({ active = "home", onNavigate, onGameSelect }) {
     <aside className="ui-sidebar">
       {/* Profile Section */}
       <div className="ui-sidebar__section">
-        <div className="ui-profile">
+        <div className="ui-profile" onClick={() => onProfileClick && onProfileClick()}>
           <img src={logoImage} alt="Nazril" className="ui-profile__avatar" />
           <span className="ui-profile__name">Nazril</span>
         </div>
@@ -72,7 +72,12 @@ function Sidebar({ active = "home", onNavigate, onGameSelect }) {
 
       {/* My Library Section */}
       <div className="ui-sidebar__library-container">
-        <MyLibrary onGameSelect={onGameSelect} />
+        <MyLibrary 
+          onGameSelect={onGameSelect}
+          libraryState={libraryState}
+          onRefreshLibrary={onRefreshLibrary}
+          onUpdateFilter={onUpdateFilter}
+        />
       </div>
       
       {/* Steam Control Section - Always at bottom */}

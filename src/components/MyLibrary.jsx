@@ -4,15 +4,28 @@ import { FiRefreshCw, FiPlay } from 'react-icons/fi';
 import { LibraryGameSkeleton } from './SkeletonLoader';
 import '../styles/MyLibrary.css';
 
-function MyLibrary({ onGameSelect }) {
-  const [games, setGames] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [filter, setFilter] = useState('');
+function MyLibrary({ onGameSelect, libraryState, onRefreshLibrary, onUpdateFilter }) {
+  // Use shared state if provided, otherwise fallback to local state
+  const [localGames, setLocalGames] = useState([]);
+  const [localIsLoading, setLocalIsLoading] = useState(true);
+  const [localError, setLocalError] = useState('');
+  const [localFilter, setLocalFilter] = useState('');
   const [lastFetchTime, setLastFetchTime] = useState(0);
+  
+  // Use shared state if available, otherwise use local state
+  const games = libraryState ? libraryState.games : localGames;
+  const isLoading = libraryState ? libraryState.isLoading : localIsLoading;
+  const error = libraryState ? libraryState.error : localError;
+  const filter = libraryState ? libraryState.filter : localFilter;
 
   const fetchLibraryGames = async () => {
-    // Prevent rapid successive calls (minimum 2 seconds between fetches)
+    // Use shared refresh if available, otherwise use local fetch
+    if (onRefreshLibrary) {
+      await onRefreshLibrary();
+      return;
+    }
+    
+    // Fallback to local fetch logic
     const now = Date.now();
     if (now - lastFetchTime < 2000) {
       console.log('Skipping fetch - too soon after last request');
@@ -20,22 +33,25 @@ function MyLibrary({ onGameSelect }) {
     }
     
     setLastFetchTime(now);
-    setIsLoading(true);
-    setError('');
+    setLocalIsLoading(true);
+    setLocalError('');
     try {
       const libraryGames = await invoke('get_library_games');
-      setGames(libraryGames || []);
+      setLocalGames(libraryGames || []);
     } catch (err) {
       console.error('Failed to fetch library games:', err);
-      setError('Failed to load library. Is Steam installed?');
+      setLocalError('Failed to load library. Is Steam installed?');
     } finally {
-      setIsLoading(false);
+      setLocalIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchLibraryGames();
-  }, []);
+    // Only fetch if using local state (no shared state provided)
+    if (!libraryState) {
+      fetchLibraryGames();
+    }
+  }, [libraryState]);
 
   const filteredGames = useMemo(() => {
     if (!filter) {
@@ -64,8 +80,14 @@ function MyLibrary({ onGameSelect }) {
           type="text"
           placeholder="Filter library"
           className="library-filter-input"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+            value={filter}
+            onChange={(e) => {
+              if (onUpdateFilter) {
+                onUpdateFilter(e.target.value);
+              } else {
+                setLocalFilter(e.target.value);
+              }
+            }}
         />
       </div>
 

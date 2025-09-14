@@ -6,6 +6,7 @@ import Catalogue from "./components/Catalogue";
 import GameDetail from "./components/GameDetail";
 import LoadingScreen from "./components/LoadingScreen";
 import Settings from "./components/Settings";
+import UserProfile from "./components/UserProfile";
 import "./App.css";
 
 function App() {
@@ -21,6 +22,14 @@ function App() {
   const [loadingProgress, setLoadingProgress] = React.useState(0);
   const [loadingStep, setLoadingStep] = React.useState("Initializing Zenith...");
   const [initError, setInitError] = React.useState(null);
+  
+  // Shared library state
+  const [libraryState, setLibraryState] = React.useState({
+    games: [],
+    isLoading: true,
+    error: null,
+    filter: ''
+  });
 
   // App initialization
   React.useEffect(() => {
@@ -119,6 +128,46 @@ function App() {
     setRoute("detail");
   };
 
+  const handleProfileClick = () => {
+    setRoute("profile");
+  };
+
+  // Shared library functions
+  const loadLibrary = async () => {
+    setLibraryState(prev => ({ ...prev, isLoading: true, error: null }));
+    
+    try {
+      const games = await invoke('get_library_games');
+      setLibraryState(prev => ({ 
+        ...prev, 
+        games: games || [], 
+        isLoading: false 
+      }));
+    } catch (error) {
+      console.error('Error loading library:', error);
+      setLibraryState(prev => ({ 
+        ...prev, 
+        error: error.message || 'Failed to load library', 
+        isLoading: false 
+      }));
+    }
+  };
+
+  const refreshLibrary = async () => {
+    await loadLibrary();
+  };
+
+  const updateLibraryFilter = (filter) => {
+    setLibraryState(prev => ({ ...prev, filter }));
+  };
+
+  // Load library on app initialization
+  React.useEffect(() => {
+    if (!isLoading && !initError) {
+      loadLibrary();
+    }
+  }, [isLoading, initError]);
+
   // Show loading screen during initialization
   if (isLoading) {
     return (
@@ -153,6 +202,15 @@ function App() {
     case 'settings':
       content = <Settings />;
       break;
+    case 'profile':
+      content = <UserProfile 
+        onGameSelect={handleLibraryGameSelect}
+        onBack={() => setRoute('home')}
+        libraryState={libraryState}
+        onRefreshLibrary={refreshLibrary}
+        onUpdateFilter={updateLibraryFilter}
+      />;
+      break;
     default:
       content = <Home />;
   }
@@ -162,7 +220,11 @@ function App() {
       <Sidebar 
         active={route} 
         onNavigate={setRoute} 
-        onGameSelect={handleLibraryGameSelect} 
+        onGameSelect={handleLibraryGameSelect}
+        onProfileClick={handleProfileClick}
+        libraryState={libraryState}
+        onRefreshLibrary={refreshLibrary}
+        onUpdateFilter={updateLibraryFilter}
       />
       <main className="ui-main">
         {content}

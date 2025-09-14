@@ -33,6 +33,8 @@ dirs = "5.0"
 chrono = { version = "0.4", features = ["serde"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-updater = "2"
+rusqlite = { version = "0.29", features = ["bundled", "chrono"] }
+serde_rusqlite = "0.33"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
