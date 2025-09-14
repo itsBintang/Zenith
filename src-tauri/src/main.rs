@@ -526,6 +526,12 @@ lazy_static::lazy_static! {
             .build()
             .expect("Failed to create download HTTP client")
     };
+    
+    // Multiple bypass download sources with fallback mechanism
+    static ref BYPASS_SOURCES: Vec<&'static str> = vec![
+        "https://bypass.nzr.web.id",
+        "https://bypass1.nzr.web.id",
+    ];
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -2624,37 +2630,40 @@ async fn remove_game(app_id: String) -> Result<DownloadResult, String> {
 async fn check_bypass_availability(app_id: String) -> Result<BypassStatus, String> {
     println!("Checking bypass availability for AppID: {}", app_id);
 
-    let bypass_url = format!("https://bypass.nzr.web.id/{}.zip", app_id);
+    // Check if bypass already installed first
+    let is_installed = check_bypass_installed(&app_id).await.unwrap_or(false);
 
-    // HEAD request untuk cek file exists + size
-    match DOWNLOAD_CLIENT.head(&bypass_url).send().await {
-        Ok(response) => {
-            if response.status().is_success() {
-                // Check if bypass already installed
-                let is_installed = check_bypass_installed(&app_id).await.unwrap_or(false);
+    // Try multiple sources to check availability
+    for (index, source) in BYPASS_SOURCES.iter().enumerate() {
+        let bypass_url = format!("{}/{}.zip", source, app_id);
+        println!("🔍 Checking source {} of {}: {}", index + 1, BYPASS_SOURCES.len(), source);
 
-                Ok(BypassStatus {
-                    available: true,
-                    installing: false,
-                    installed: is_installed,
-                })
-            } else {
-                Ok(BypassStatus {
-                    available: false,
-                    installing: false,
-                    installed: false,
-                })
+        // HEAD request untuk cek file exists + size
+        match DOWNLOAD_CLIENT.head(&bypass_url).send().await {
+            Ok(response) => {
+                if response.status().is_success() {
+                    println!("✅ Bypass found at source: {}", source);
+                    return Ok(BypassStatus {
+                        available: true,
+                        installing: false,
+                        installed: is_installed,
+                    });
+                } else {
+                    println!("❌ Source {} returned status: {}", source, response.status());
+                }
+            }
+            Err(e) => {
+                println!("❌ Error checking source {}: {}", source, e);
             }
         }
-        Err(e) => {
-            println!("Error checking bypass availability: {}", e);
-            Ok(BypassStatus {
-                available: false,
-                installing: false,
-                installed: false,
-            })
-        }
     }
+
+    println!("❌ Bypass not available from any source");
+    Ok(BypassStatus {
+        available: false,
+        installing: false,
+        installed: is_installed,
+    })
 }
 
 async fn check_bypass_installed(app_id: &str) -> Result<bool, String> {
@@ -2738,15 +2747,13 @@ async fn install_bypass(app_id: String, window: tauri::Window) -> Result<BypassR
 
     println!("✅ Game directory validated successfully");
 
-    // Step 3: Check bypass availability
+    // Step 3: Check bypass availability and find working source
     emit_progress("Checking bypass availability...", 30.0);
-    let bypass_url = format!("https://bypass.nzr.web.id/{}.zip", app_id);
-
-    // Step 4: Download bypass
+    
+    // Step 4: Download bypass from multiple sources
     emit_progress("Downloading bypass files...", 40.0);
-    println!("🌐 Bypass URL: {}", bypass_url);
 
-    let download_path = download_bypass_with_progress(&bypass_url, &window, &app_id)
+    let download_path = download_bypass_from_multiple_sources(&window, &app_id)
         .await
         .map_err(|e| {
             println!("❌ Download completely failed: {}", e);
@@ -2861,6 +2868,46 @@ fn find_steam_installation_path() -> Result<String, String> {
     }
 
     Err("Steam installation not found".to_string())
+}
+
+async fn download_bypass_from_multiple_sources(
+    window: &tauri::Window,
+    app_id: &str,
+) -> Result<String, String> {
+    println!("📥 Starting bypass download from multiple sources");
+
+    let mut all_errors = Vec::new();
+
+    // Try each source
+    for (source_index, source) in BYPASS_SOURCES.iter().enumerate() {
+        let bypass_url = format!("{}/{}.zip", source, app_id);
+        println!("🔄 Trying source {} of {}: {}", source_index + 1, BYPASS_SOURCES.len(), source);
+
+        match download_bypass_with_progress(&bypass_url, window, app_id).await {
+            Ok(path) => {
+                println!("✅ Download successful from source: {}", source);
+                return Ok(path);
+            }
+            Err(e) => {
+                let error_msg = format!("Source {} failed: {}", source, e);
+                println!("❌ {}", error_msg);
+                all_errors.push(error_msg);
+
+                // Wait a bit before trying next source (except for last source)
+                if source_index < BYPASS_SOURCES.len() - 1 {
+                    println!("⏳ Waiting 2 seconds before trying next source...");
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                }
+            }
+        }
+    }
+
+    let combined_errors = all_errors.join("; ");
+    Err(format!(
+        "Download failed from all {} sources. Errors: {}",
+        BYPASS_SOURCES.len(),
+        combined_errors
+    ))
 }
 
 async fn download_bypass_with_progress(
