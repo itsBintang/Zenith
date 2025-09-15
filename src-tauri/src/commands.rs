@@ -1,6 +1,7 @@
 use crate::models::RepoType;
 use anyhow::Result;
 use regex::Regex;
+// Removed unused imports
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -9,6 +10,7 @@ use tauri::command;
 use uuid::Uuid;
 use walkdir::WalkDir;
 use zip::ZipArchive;
+use base64::prelude::*;
 
 #[cfg(target_os = "windows")]
 use winreg::enums::*;
@@ -266,5 +268,276 @@ fn find_lua_file_for_appid(
         "Could not find a .lua file for AppID: {}",
         app_id_to_find
     )))
+}
+
+// Profile Management Commands using SQLite
+#[command]
+pub async fn get_user_profile() -> Result<crate::database::models::UserProfile, String> {
+    use crate::database::{DatabaseManager, operations::UserProfileOperations};
+    
+    let db_path = get_profile_db_path().map_err(|e| e.to_string())?;
+    let db_manager = DatabaseManager::new(db_path).map_err(|e| e.to_string())?;
+    
+    let profile = db_manager.with_connection(|conn| {
+        match UserProfileOperations::get(conn)? {
+            Some(profile) => Ok(profile),
+            None => {
+                // Create default profile if none exists
+                let default_profile = crate::database::models::UserProfile::new(
+                    "Nazril".to_string(), 
+                    Some("Steam User".to_string())
+                );
+                UserProfileOperations::upsert(conn, &default_profile)?;
+                Ok(default_profile)
+            }
+        }
+    }).map_err(|e| e.to_string())?;
+    
+    Ok(profile)
+}
+
+#[command]
+pub async fn save_user_profile(profile: crate::database::models::UserProfile) -> Result<(), String> {
+    use crate::database::{DatabaseManager, operations::UserProfileOperations};
+    
+    let db_path = get_profile_db_path().map_err(|e| e.to_string())?;
+    let db_manager = DatabaseManager::new(db_path).map_err(|e| e.to_string())?;
+    
+    db_manager.with_connection(|conn| {
+        UserProfileOperations::upsert(conn, &profile)
+    }).map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
+#[command]
+pub async fn upload_profile_image(image_data: Vec<u8>, image_type: String) -> Result<String, String> {
+    use crate::database::{DatabaseManager, operations::UserProfileOperations};
+    
+    // Validate image type
+    let extension = match image_type.as_str() {
+        "banner" => "banner.jpg",
+        "avatar" => "avatar.jpg",
+        _ => return Err("Invalid image type. Use 'banner' or 'avatar'".to_string()),
+    };
+    
+    let profile_dir = get_profile_dir().map_err(|e| e.to_string())?;
+    let image_path = profile_dir.join(extension);
+    
+    // Create profile directory if it doesn't exist
+    fs::create_dir_all(&profile_dir).map_err(|e| e.to_string())?;
+    
+    // Save image file
+    fs::write(&image_path, image_data).map_err(|e| e.to_string())?;
+    
+    // Update database with new image path
+    let db_path = get_profile_db_path().map_err(|e| e.to_string())?;
+    let db_manager = DatabaseManager::new(db_path).map_err(|e| e.to_string())?;
+    
+    let field_name = match image_type.as_str() {
+        "banner" => "banner_path",
+        "avatar" => "avatar_path",
+        _ => return Err("Invalid image type".to_string()),
+    };
+    
+    db_manager.with_connection(|conn| {
+        UserProfileOperations::update_field(conn, field_name, Some(&image_path.to_string_lossy().to_string()))
+    }).map_err(|e| e.to_string())?;
+    
+    // Return the file path
+    Ok(image_path.to_string_lossy().to_string())
+}
+
+#[command]
+pub async fn get_profile_image_path(image_type: String) -> Result<Option<String>, String> {
+    let extension = match image_type.as_str() {
+        "banner" => "banner.jpg",
+        "avatar" => "avatar.jpg",
+        _ => return Err("Invalid image type. Use 'banner' or 'avatar'".to_string()),
+    };
+    
+    let profile_dir = get_profile_dir().map_err(|e| e.to_string())?;
+    let image_path = profile_dir.join(extension);
+    
+    if image_path.exists() {
+        Ok(Some(image_path.to_string_lossy().to_string()))
+    } else {
+        Ok(None)
+    }
+}
+
+#[command]
+pub async fn get_profile_image_base64(image_type: String) -> Result<Option<String>, String> {
+    let extension = match image_type.as_str() {
+        "banner" => "banner.jpg",
+        "avatar" => "avatar.jpg",
+        _ => return Err("Invalid image type. Use 'banner' or 'avatar'".to_string()),
+    };
+    
+    let profile_dir = get_profile_dir().map_err(|e| e.to_string())?;
+    let image_path = profile_dir.join(extension);
+    
+    if image_path.exists() {
+        let image_data = fs::read(&image_path).map_err(|e| e.to_string())?;
+        let base64_data = base64::prelude::BASE64_STANDARD.encode(&image_data);
+        Ok(Some(format!("data:image/jpeg;base64,{}", base64_data)))
+    } else {
+        Ok(None)
+    }
+}
+
+#[command]
+pub async fn update_profile_field(field: String, value: String) -> Result<(), String> {
+    use crate::database::{DatabaseManager, operations::UserProfileOperations};
+    
+    let db_path = get_profile_db_path().map_err(|e| e.to_string())?;
+    let db_manager = DatabaseManager::new(db_path).map_err(|e| e.to_string())?;
+    
+    db_manager.with_connection(|conn| {
+        UserProfileOperations::update_field(conn, &field, Some(&value))
+    }).map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
+// Helper functions
+fn get_profile_dir() -> Result<PathBuf, anyhow::Error> {
+    // Use platform-specific app data directory
+    let app_dir = if cfg!(target_os = "windows") {
+        std::env::var("APPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from(r"C:\Users\Default\AppData\Roaming"))
+    } else if cfg!(target_os = "macos") {
+        dirs::home_dir()
+            .map(|home| home.join("Library").join("Application Support"))
+            .unwrap_or_else(|| PathBuf::from("/tmp"))
+    } else {
+        dirs::home_dir()
+            .map(|home| home.join(".local").join("share"))
+            .unwrap_or_else(|| PathBuf::from("/tmp"))
+    };
+    
+    Ok(app_dir.join("zenith").join("profile"))
+}
+
+fn get_profile_db_path() -> Result<PathBuf, anyhow::Error> {
+    // Use the same database as the main application
+    let app_dir = if cfg!(target_os = "windows") {
+        std::env::var("APPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from(r"C:\Users\Default\AppData\Roaming"))
+    } else if cfg!(target_os = "macos") {
+        dirs::home_dir()
+            .map(|home| home.join("Library").join("Application Support"))
+            .unwrap_or_else(|| PathBuf::from("/tmp"))
+    } else {
+        dirs::home_dir()
+            .map(|home| home.join(".local").join("share"))
+            .unwrap_or_else(|| PathBuf::from("/tmp"))
+    };
+    
+    let db_dir = app_dir.join("zenith");
+    fs::create_dir_all(&db_dir)?;
+    Ok(db_dir.join("cache.db"))
+}
+
+// Steam Path Management Commands
+#[command]
+pub async fn get_steam_path() -> Result<Option<String>, String> {
+    use crate::database::{DatabaseManager, operations::CacheMetadataOperations};
+    
+    let db_path = get_profile_db_path().map_err(|e| e.to_string())?;
+    let db_manager = DatabaseManager::new(db_path).map_err(|e| e.to_string())?;
+    
+    let steam_path = db_manager.with_connection(|conn| {
+        CacheMetadataOperations::get(conn, "steam_path")
+    }).map_err(|e| e.to_string())?;
+    
+    Ok(steam_path)
+}
+
+#[command]
+pub async fn set_steam_path(path: String) -> Result<(), String> {
+    use crate::database::{DatabaseManager, operations::CacheMetadataOperations};
+    
+    // Validate that the path exists and contains steam.exe
+    let steam_exe_path = PathBuf::from(&path).join("steam.exe");
+    if !steam_exe_path.exists() {
+        return Err(format!("Invalid Steam path: steam.exe not found in {}", path));
+    }
+    
+    let db_path = get_profile_db_path().map_err(|e| e.to_string())?;
+    let db_manager = DatabaseManager::new(db_path).map_err(|e| e.to_string())?;
+    
+    db_manager.with_connection(|conn| {
+        CacheMetadataOperations::set(conn, "steam_path", &path)
+    }).map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
+#[command]
+pub async fn detect_steam_path() -> Result<Option<String>, String> {
+    // Try to auto-detect Steam installation path
+    #[cfg(target_os = "windows")]
+    {
+        // Try registry first
+        if let Ok(hklm) = RegKey::predef(HKEY_LOCAL_MACHINE).open_subkey("SOFTWARE\\WOW6432Node\\Valve\\Steam") {
+            if let Ok(install_path) = hklm.get_value::<String, _>("InstallPath") {
+                let steam_exe = PathBuf::from(&install_path).join("steam.exe");
+                if steam_exe.exists() {
+                    return Ok(Some(install_path));
+                }
+            }
+        }
+        
+        if let Ok(hklm) = RegKey::predef(HKEY_LOCAL_MACHINE).open_subkey("SOFTWARE\\Valve\\Steam") {
+            if let Ok(install_path) = hklm.get_value::<String, _>("InstallPath") {
+                let steam_exe = PathBuf::from(&install_path).join("steam.exe");
+                if steam_exe.exists() {
+                    return Ok(Some(install_path));
+                }
+            }
+        }
+        
+        // Try common installation paths
+        let common_paths = vec![
+            "C:\\Program Files (x86)\\Steam",
+            "C:\\Program Files\\Steam",
+            "D:\\Steam",
+            "E:\\Steam",
+        ];
+        
+        for path in common_paths {
+            let steam_exe = PathBuf::from(path).join("steam.exe");
+            if steam_exe.exists() {
+                return Ok(Some(path.to_string()));
+            }
+        }
+    }
+    
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Some(home_dir) = dirs::home_dir() {
+            let linux_paths = [".steam/steam", ".local/share/Steam"];
+            let macos_path = "Library/Application Support/Steam";
+            
+            if cfg!(target_os = "linux") {
+                for path in linux_paths.iter() {
+                    let steam_path = home_dir.join(path);
+                    if steam_path.exists() {
+                        return Ok(Some(steam_path.to_string_lossy().to_string()));
+                    }
+                }
+            } else if cfg!(target_os = "macos") {
+                let steam_path = home_dir.join(macos_path);
+                if steam_path.exists() {
+                    return Ok(Some(steam_path.to_string_lossy().to_string()));
+                }
+            }
+        }
+    }
+    
+    Ok(None)
 }
 

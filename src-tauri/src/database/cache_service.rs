@@ -79,28 +79,58 @@ impl SqliteCacheService {
 
     /// Get game details with caching and stale-while-revalidate
     pub async fn get_game_details(&self, app_id: &str) -> Option<GameDetail> {
-        // Check database cache first
-        let cached_detail = self.db.with_connection(|conn| {
+        // Check database cache first with proper error handling
+        let cached_detail = match self.db.with_connection(|conn| {
             GameDetailOperations::get_by_id(conn, app_id)
-        }).ok().flatten();
+        }) {
+            Ok(detail_option) => detail_option,
+            Err(e) => {
+                #[cfg(debug_assertions)]
+                eprintln!("Database error for app_id {}: {}", app_id, e);
+                
+                // Log error but don't crash - return None to trigger API fetch
+                return None;
+            }
+        };
 
         if let Some(detail) = cached_detail {
             if !detail.is_expired() {
                 // Fresh data - return immediately
+                // Cache hit - silent unless verbose debugging needed
+                // #[cfg(debug_assertions)]
+                // println!("Cache HIT (fresh) for {}", app_id);
+                
                 return Some(detail.into());
             } else {
-                // Stale data - return it but refresh in background
-                let stale_data = detail.clone();
-                let app_id_clone = app_id.to_string();
-                let service_clone = Arc::new(self.clone_for_background());
+                // Check what categories are expired for smarter handling
+                let expired_categories = detail.get_expired_categories();
                 
-                tokio::spawn(async move {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                    let _ = service_clone.refresh_game_details_background(&app_id_clone).await;
-                });
+                #[cfg(debug_assertions)]
+                println!("Cache HIT (stale) for {}, expired: {:?}", app_id, expired_categories);
+                
+                // For critical data (DLC), force fresh fetch
+                if expired_categories.contains(&"dynamic") {
+                    #[cfg(debug_assertions)]
+                    println!("Critical data expired for {}, forcing fresh fetch", app_id);
+                    
+                    return None; // Force API call for critical data
+                } else {
+                    // For non-critical data, return stale and refresh in background
+                    let stale_data = detail.clone();
+                    let app_id_clone = app_id.to_string();
+                    let service_clone = Arc::new(self.clone_for_background());
+                    
+                    tokio::spawn(async move {
+                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                        let _ = service_clone.refresh_game_details_background(&app_id_clone).await;
+                    });
 
-                return Some(stale_data.into());
+                    return Some(stale_data.into());
+                }
             }
+        } else {
+            #[cfg(debug_assertions)]
+            println!("Cache MISS for {}", app_id);
         }
 
         None
@@ -110,7 +140,7 @@ impl SqliteCacheService {
     pub fn set_game_details(&self, app_id: String, details: GameDetail) -> Result<()> {
         let db_detail: GameDetailDb = details.clone().into();
         
-        self.db.with_connection(|conn| {
+        let result = self.db.with_connection(|conn| {
             // First ensure the game exists in games table (for foreign key constraint)
             let game = Game::new(
                 details.app_id.clone(),
@@ -122,29 +152,56 @@ impl SqliteCacheService {
             
             // Then insert game details
             GameDetailOperations::upsert(conn, &db_detail)
-        })?;
+        });
 
-        #[cfg(debug_assertions)]
-        println!("Cached game details for {}", app_id);
-
-        Ok(())
+        match result {
+            Ok(_) => {
+                #[cfg(debug_assertions)]
+                println!("Successfully cached game details for {} with granular TTL", app_id);
+                Ok(())
+            }
+            Err(e) => {
+                #[cfg(debug_assertions)]
+                eprintln!("Failed to cache game details for {}: {}", app_id, e);
+                Err(e)
+            }
+        }
     }
 
     /// Get game name with caching
     pub async fn get_game_name(&self, app_id: &str) -> Option<String> {
-        let cached_game = self.db.with_connection(|conn| {
+        let cached_game = match self.db.with_connection(|conn| {
             GameOperations::get_by_id(conn, app_id)
-        }).ok().flatten();
+        }) {
+            Ok(game_option) => game_option,
+            Err(e) => {
+                #[cfg(debug_assertions)]
+                eprintln!("Database error getting game name for {}: {}", app_id, e);
+                
+                return None;
+            }
+        };
 
         if let Some(game) = cached_game {
             if !game.is_expired() {
+                // Game name cache hit - silent for cleaner logs
+                // #[cfg(debug_assertions)]
+                // println!("Game name cache HIT (fresh) for {}: {}", app_id, game.name);
+                
                 return Some(game.name);
             } else {
                 // Stale data - return it but refresh in background
                 let stale_name = game.name.clone();
+                
+                #[cfg(debug_assertions)]
+                println!("Game name cache HIT (stale) for {}: {}", app_id, stale_name);
+                
                 self.queue_for_refresh(app_id.to_string());
                 return Some(stale_name);
             }
+        } else {
+            #[cfg(debug_assertions)]
+            println!("Game name cache MISS for {}", app_id);
         }
 
         None
@@ -173,19 +230,37 @@ impl SqliteCacheService {
     /// Get or create request lock to prevent duplicate API calls
     pub async fn get_or_create_request_lock(&self, app_id: &str) -> Arc<tokio::sync::Mutex<()>> {
         let mut in_flight = self.in_flight_requests.lock().await;
-        if let Some(lock) = in_flight.get(app_id) {
-            lock.clone()
-        } else {
-            let lock = Arc::new(tokio::sync::Mutex::new(()));
-            in_flight.insert(app_id.to_string(), lock.clone());
-            lock
+        
+        // Use entry API to avoid race condition
+        match in_flight.get(app_id) {
+            Some(existing_lock) => {
+                #[cfg(debug_assertions)]
+                println!("Using existing request lock for {}", app_id);
+                existing_lock.clone()
+            }
+            None => {
+                let lock = Arc::new(tokio::sync::Mutex::new(()));
+                in_flight.insert(app_id.to_string(), lock.clone());
+                
+                #[cfg(debug_assertions)]
+                println!("Created new request lock for {}", app_id);
+                
+                lock
+            }
         }
     }
 
     /// Remove request lock
     pub async fn remove_request_lock(&self, app_id: &str) {
         let mut in_flight = self.in_flight_requests.lock().await;
-        in_flight.remove(app_id);
+        let removed = in_flight.remove(app_id);
+        
+        #[cfg(debug_assertions)]
+        if removed.is_some() {
+            println!("Removed request lock for {}", app_id);
+        } else {
+            println!("Warning: Attempted to remove non-existent lock for {}", app_id);
+        }
     }
 
     /// Throttle requests to avoid rate limiting

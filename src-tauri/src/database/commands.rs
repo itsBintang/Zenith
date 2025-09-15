@@ -54,6 +54,81 @@ pub async fn get_database_stats() -> Result<DatabaseStats, String> {
 }
 
 #[command]
+pub async fn debug_cache_entry(app_id: String) -> Result<String, String> {
+    let cache_dir = dirs::data_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("zenith-launcher")
+        .join("cache");
+    
+    let db_path = cache_dir.join("games.db");
+    let db = DatabaseManager::new(db_path).map_err(|e| e.to_string())?;
+    
+    let result = db.with_connection(|conn| {
+        use crate::database::operations::GameDetailOperations;
+        GameDetailOperations::get_by_id(conn, &app_id)
+    }).map_err(|e| e.to_string())?;
+    
+    match result {
+        Some(detail) => {
+            let now = chrono::Utc::now().timestamp();
+            let expired_categories = detail.get_expired_categories();
+            
+            Ok(format!(
+                "Cache Entry for {}: 
+- Name: {}
+- Cached at: {} ({}s ago)
+- Global expires at: {} ({} expired: {})
+- Dynamic expires at: {} ({} expired: {})
+- SemiStatic expires at: {} ({} expired: {})
+- Static expires at: {} ({} expired: {})
+- Expired categories: {:?}
+- is_expired(): {}
+- has_any_expired(): {}",
+                app_id,
+                detail.name,
+                detail.cached_at,
+                now - detail.cached_at,
+                detail.expires_at,
+                if now > detail.expires_at { "EXPIRED" } else { "FRESH" },
+                now > detail.expires_at,
+                detail.dynamic_expires_at,
+                if now > detail.dynamic_expires_at { "EXPIRED" } else { "FRESH" },
+                now > detail.dynamic_expires_at,
+                detail.semistatic_expires_at,
+                if now > detail.semistatic_expires_at { "EXPIRED" } else { "FRESH" },
+                now > detail.semistatic_expires_at,
+                detail.static_expires_at,
+                if now > detail.static_expires_at { "EXPIRED" } else { "FRESH" },
+                now > detail.static_expires_at,
+                expired_categories,
+                detail.is_expired(),
+                detail.has_any_expired()
+            ))
+        }
+        None => Ok(format!("No cache entry found for app_id: {}", app_id))
+    }
+}
+
+#[command]
+pub async fn force_clear_cache() -> Result<String, String> {
+    let cache_dir = dirs::data_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("zenith-launcher")
+        .join("cache");
+    
+    let db_path = cache_dir.join("games.db");
+    let db = DatabaseManager::new(db_path).map_err(|e| e.to_string())?;
+    
+    db.with_connection(|conn| {
+        conn.execute("DELETE FROM game_details", [])?;
+        conn.execute("DELETE FROM games", [])?;
+        Ok(())
+    }).map_err(|e: anyhow::Error| e.to_string())?;
+    
+    Ok("Cache cleared successfully".to_string())
+}
+
+#[command]
 pub async fn cleanup_expired_cache() -> Result<String, String> {
     let cache_dir = dirs::data_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))

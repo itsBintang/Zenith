@@ -167,8 +167,23 @@ impl GameDetailDb {
         }
     }
 
-    /// Check if this game detail entry is expired (global check)
+    /// Check if this game detail entry is expired (smart granular check)
+    /// Uses the most restrictive (shortest) TTL among all data categories
     pub fn is_expired(&self) -> bool {
+        let now = Utc::now().timestamp();
+        
+        // Use the shortest TTL to determine if ANY data category is expired
+        // This ensures we refresh when the most critical data (DLC) expires
+        let shortest_expiry = self.dynamic_expires_at
+            .min(self.semistatic_expires_at)
+            .min(self.static_expires_at);
+            
+        now > shortest_expiry
+    }
+    
+    /// Check if this game detail entry is expired (legacy global check)
+    /// Kept for backward compatibility
+    pub fn is_expired_global(&self) -> bool {
         Utc::now().timestamp() > self.expires_at
     }
 
@@ -343,6 +358,55 @@ impl CacheMetadata {
             value: row.get(1)?,
             updated_at: row.get(2)?,
         })
+    }
+}
+
+/// User profile data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserProfile {
+    pub id: i32,
+    pub name: String,
+    pub bio: Option<String>,
+    pub steam_id: Option<String>,
+    pub banner_path: Option<String>,
+    pub avatar_path: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+impl UserProfile {
+    /// Create new user profile
+    pub fn new(name: String, bio: Option<String>) -> Self {
+        let now = Utc::now().timestamp();
+        Self {
+            id: 1, // Single profile entry
+            name,
+            bio,
+            steam_id: None,
+            banner_path: None,
+            avatar_path: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    /// Convert from SQLite row
+    pub fn from_row(row: &Row) -> SqliteResult<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            bio: row.get(2)?,
+            steam_id: row.get(3)?,
+            banner_path: row.get(4)?,
+            avatar_path: row.get(5)?,
+            created_at: row.get(6)?,
+            updated_at: row.get(7)?,
+        })
+    }
+
+    /// Update timestamp
+    pub fn touch(&mut self) {
+        self.updated_at = Utc::now().timestamp();
     }
 }
 

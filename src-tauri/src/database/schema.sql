@@ -57,6 +57,18 @@ CREATE TABLE cache_metadata (
     updated_at INTEGER DEFAULT (strftime('%s', 'now'))
 );
 
+-- User profile data
+CREATE TABLE user_profile (
+    id INTEGER PRIMARY KEY DEFAULT 1, -- Single profile entry
+    name TEXT NOT NULL DEFAULT 'Nazril',
+    bio TEXT DEFAULT 'Steam User',
+    steam_id TEXT,
+    banner_path TEXT, -- Local file path to banner image
+    avatar_path TEXT, -- Local file path to avatar image
+    created_at INTEGER DEFAULT (strftime('%s', 'now')),
+    updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+);
+
 -- Indexes for better query performance
 CREATE INDEX idx_games_name ON games(name);
 CREATE INDEX idx_games_cached_at ON games(cached_at);
@@ -75,9 +87,13 @@ CREATE INDEX idx_user_library_added_at ON user_library(added_at);
 CREATE INDEX idx_user_library_last_accessed ON user_library(last_accessed);
 
 CREATE INDEX idx_cache_metadata_key ON cache_metadata(key);
+CREATE INDEX idx_user_profile_updated_at ON user_profile(updated_at);
 
 -- Insert initial metadata
 INSERT INTO cache_metadata (key, value) VALUES 
     ('schema_version', '1'),
     ('created_at', strftime('%s', 'now')),
     ('last_cleanup', '0');
+
+-- Insert default user profile
+INSERT INTO user_profile (id, name, bio) VALUES (1, 'Nazril', 'Steam User');

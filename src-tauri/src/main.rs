@@ -3200,6 +3200,9 @@ fn main() {
             get_dlcs_in_lua,
             sync_dlcs_in_lua,
             clear_cache,
+            // Debug commands
+            database::commands::debug_cache_entry,
+            database::commands::force_clear_cache,
             refresh_cache_background,
             remove_game,
             check_bypass_availability,
@@ -3222,7 +3225,18 @@ fn main() {
             // Safe Batch Processing Commands
             database::commands::batch_refresh_games,
             database::commands::smart_refresh_library,
-            database::commands::get_cache_config
+            database::commands::get_cache_config,
+            // Profile Management Commands
+            commands::get_user_profile,
+            commands::save_user_profile,
+            commands::upload_profile_image,
+            commands::get_profile_image_path,
+            commands::get_profile_image_base64,
+            commands::update_profile_field,
+            // Steam Path Management Commands
+            commands::get_steam_path,
+            commands::set_steam_path,
+            commands::detect_steam_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { FiX, FiLoader, FiChevronLeft, FiChevronRight, FiCheck, FiPlus, FiMinus } from 'react-icons/fi';
+import { FiX, FiLoader, FiChevronLeft, FiChevronRight, FiCheck, FiPlus, FiMinus, FiLock } from 'react-icons/fi';
 import '../styles/DlcManager.css';
 
 function DlcManager({ game, onClose, showNotification }) {
@@ -215,17 +215,24 @@ function DlcManager({ game, onClose, showNotification }) {
                   const dlcIdStr = dlc.app_id;
                   const isSelected = selectedDlcs.has(dlcIdStr);
                   const wasInstalled = installedDlcs.has(dlcIdStr);
+                  const isLocked = !wasInstalled && !isSelected;
 
                   return (
                     <div 
                       key={dlc.app_id} 
-                      className={`dlc-card ${isSelected ? 'selected' : ''}`}
+                      className={`dlc-card ${isSelected ? 'selected' : ''} ${isLocked ? 'locked' : ''}`}
                       onClick={() => handleToggleDlc(dlc.app_id)}
                     >
                       {/* Selection Indicator */}
                       <div className="dlc-selection-indicator">
-                        {isSelected ? <FiCheck size={16} /> : <div className="selection-circle" />}
+                        {isSelected ? <FiCheck size={16} /> : <FiPlus size={16} />}
                       </div>
+                      
+                      {isLocked && (
+                        <div className="dlc-lock-badge">
+                          <FiLock size={14} />
+                        </div>
+                      )}
 
                       {/* DLC Image */}
                       <div className="dlc-card-image">
@@ -236,20 +243,15 @@ function DlcManager({ game, onClose, showNotification }) {
                             e.target.src = `https://cdn.cloudflare.steamstatic.com/steam/apps/${dlc.app_id}/header.jpg`;
                           }}
                         />
-                        {/* Lock overlay for unselected items */}
-                        {!isSelected && (
-                          <div className="dlc-lock-overlay">
-                            <div className="lock-icon">🔒</div>
-                          </div>
+                        {/* Title overlay */}
+                        <div className="dlc-card-gradient"></div>
+                        <div className="dlc-card-title-overlay">{dlc.name}</div>
+                        {isLocked && (
+                          <div className="dlc-card-subtitle-overlay">ID: {dlc.app_id}</div>
                         )}
                       </div>
 
-                      {/* DLC Info */}
-                      <div className="dlc-card-info">
-                        <h3 className="dlc-card-title">{dlc.name}</h3>
-                        <p className="dlc-card-id">ID: {dlc.app_id}</p>
-                        <p className="dlc-card-size">0 B Size</p>
-                      </div>
+                      {/* DLC Info removed per design: title overlays on image */}
 
                       {/* Status Badge */}
                       {wasInstalled && !isSelected && (

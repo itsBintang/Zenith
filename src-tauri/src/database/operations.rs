@@ -1,6 +1,6 @@
 use anyhow::Result;
 use rusqlite::{params, Connection, OptionalExtension};
-use crate::database::models::{Game, GameDetailDb, UserLibraryEntry, CacheMetadata};
+use crate::database::models::{Game, GameDetailDb, UserLibraryEntry, CacheMetadata, UserProfile};
 
 /// Game operations
 pub struct GameOperations;
@@ -350,5 +350,84 @@ impl CacheMetadataOperations {
     pub fn delete(conn: &Connection, key: &str) -> Result<bool> {
         let rows_affected = conn.execute("DELETE FROM cache_metadata WHERE key = ?1", [key])?;
         Ok(rows_affected > 0)
+    }
+}
+
+/// User profile operations
+pub struct UserProfileOperations;
+
+impl UserProfileOperations {
+    /// Get user profile (always returns the single profile entry)
+    pub fn get(conn: &Connection) -> Result<Option<UserProfile>> {
+        let mut stmt = conn.prepare(
+            "SELECT id, name, bio, steam_id, banner_path, avatar_path, created_at, updated_at 
+             FROM user_profile WHERE id = 1"
+        )?;
+        
+        let profile = stmt.query_row([], |row| UserProfile::from_row(row))
+            .optional()?;
+        
+        Ok(profile)
+    }
+
+    /// Insert or update user profile
+    pub fn upsert(conn: &Connection, profile: &UserProfile) -> Result<()> {
+        conn.execute(
+            "INSERT OR REPLACE INTO user_profile 
+             (id, name, bio, steam_id, banner_path, avatar_path, created_at, updated_at) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                profile.id,
+                profile.name,
+                profile.bio,
+                profile.steam_id,
+                profile.banner_path,
+                profile.avatar_path,
+                profile.created_at,
+                profile.updated_at
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Update specific field
+    pub fn update_field(conn: &Connection, field: &str, value: Option<&str>) -> Result<()> {
+        let now = chrono::Utc::now().timestamp();
+        
+        match field {
+            "name" => {
+                conn.execute(
+                    "UPDATE user_profile SET name = ?1, updated_at = ?2 WHERE id = 1",
+                    params![value.unwrap_or("Nazril"), now],
+                )?;
+            }
+            "bio" => {
+                conn.execute(
+                    "UPDATE user_profile SET bio = ?1, updated_at = ?2 WHERE id = 1",
+                    params![value, now],
+                )?;
+            }
+            "steam_id" => {
+                conn.execute(
+                    "UPDATE user_profile SET steam_id = ?1, updated_at = ?2 WHERE id = 1",
+                    params![value, now],
+                )?;
+            }
+            "banner_path" => {
+                conn.execute(
+                    "UPDATE user_profile SET banner_path = ?1, updated_at = ?2 WHERE id = 1",
+                    params![value, now],
+                )?;
+            }
+            "avatar_path" => {
+                conn.execute(
+                    "UPDATE user_profile SET avatar_path = ?1, updated_at = ?2 WHERE id = 1",
+                    params![value, now],
+                )?;
+            }
+            _ => return Err(anyhow::anyhow!("Invalid field name: {}", field)),
+        }
+        
+        Ok(())
     }
 }

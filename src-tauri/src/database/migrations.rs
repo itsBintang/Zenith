@@ -2,7 +2,7 @@ use anyhow::Result;
 use rusqlite::Connection;
 
 /// Current database schema version
-const CURRENT_SCHEMA_VERSION: i32 = 2;
+const CURRENT_SCHEMA_VERSION: i32 = 3;
 
 /// Run all necessary database migrations
 pub fn run_migrations(conn: &Connection) -> Result<()> {
@@ -66,6 +66,7 @@ fn migrate_to_version(conn: &Connection, version: i32) -> Result<()> {
     match version {
         1 => migrate_to_v1(conn),
         2 => migrate_to_v2(conn),
+        3 => migrate_to_v3(conn),
         _ => Err(anyhow::anyhow!("Unknown migration version: {}", version)),
     }
 }
@@ -86,37 +87,49 @@ fn migrate_to_v1(conn: &Connection) -> Result<()> {
 fn migrate_to_v2(conn: &Connection) -> Result<()> {
     println!("Migrating to granular TTL schema (v2)...");
     
-    // Add granular TTL columns to game_details table
-    conn.execute(
-        "ALTER TABLE game_details ADD COLUMN dynamic_expires_at INTEGER NOT NULL DEFAULT 0",
-        [],
-    )?;
+    // Check if columns already exist before adding them
+    let mut stmt = conn.prepare("PRAGMA table_info(game_details)")?;
+    let column_names: Vec<String> = stmt.query_map([], |row| {
+        Ok(row.get::<_, String>(1)?) // column name is at index 1
+    })?.collect::<Result<Vec<_>, _>>()?;
     
-    conn.execute(
-        "ALTER TABLE game_details ADD COLUMN semistatic_expires_at INTEGER NOT NULL DEFAULT 0", 
-        [],
-    )?;
+    // Add granular TTL columns to game_details table if they don't exist
+    if !column_names.contains(&"dynamic_expires_at".to_string()) {
+        conn.execute(
+            "ALTER TABLE game_details ADD COLUMN dynamic_expires_at INTEGER NOT NULL DEFAULT 0",
+            [],
+        )?;
+    }
     
-    conn.execute(
-        "ALTER TABLE game_details ADD COLUMN static_expires_at INTEGER NOT NULL DEFAULT 0",
-        [],
-    )?;
+    if !column_names.contains(&"semistatic_expires_at".to_string()) {
+        conn.execute(
+            "ALTER TABLE game_details ADD COLUMN semistatic_expires_at INTEGER NOT NULL DEFAULT 0", 
+            [],
+        )?;
+    }
     
-    // Create indexes for new granular TTL columns
-    conn.execute(
-        "CREATE INDEX idx_game_details_dynamic_expires ON game_details(dynamic_expires_at)",
-        [],
-    )?;
+    if !column_names.contains(&"static_expires_at".to_string()) {
+        conn.execute(
+            "ALTER TABLE game_details ADD COLUMN static_expires_at INTEGER NOT NULL DEFAULT 0",
+            [],
+        )?;
+    }
     
-    conn.execute(
-        "CREATE INDEX idx_game_details_semistatic_expires ON game_details(semistatic_expires_at)",
+    // Create indexes for new granular TTL columns (ignore if they already exist)
+    let _ = conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_game_details_dynamic_expires ON game_details(dynamic_expires_at)",
         [],
-    )?;
+    );
     
-    conn.execute(
-        "CREATE INDEX idx_game_details_static_expires ON game_details(static_expires_at)",
+    let _ = conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_game_details_semistatic_expires ON game_details(semistatic_expires_at)",
         [],
-    )?;
+    );
+    
+    let _ = conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_game_details_static_expires ON game_details(static_expires_at)",
+        [],
+    );
     
     // Update existing records with appropriate TTL values
     let now = chrono::Utc::now().timestamp();
@@ -138,6 +151,50 @@ fn migrate_to_v2(conn: &Connection) -> Result<()> {
     )?;
     
     println!("Granular TTL schema migration completed successfully");
+    Ok(())
+}
+
+/// Migration to version 3: Add user profile table
+fn migrate_to_v3(conn: &Connection) -> Result<()> {
+    println!("Adding user profile table (v3)...");
+    
+    // Check if user_profile table already exists
+    let table_exists: bool = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='user_profile'",
+        [],
+        |row| Ok(row.get::<_, i32>(0)? > 0)
+    )?;
+    
+    if !table_exists {
+        // Create user_profile table
+        conn.execute(
+            "CREATE TABLE user_profile (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                name TEXT NOT NULL DEFAULT 'Nazril',
+                bio TEXT DEFAULT 'Steam User',
+                steam_id TEXT,
+                banner_path TEXT,
+                avatar_path TEXT,
+                created_at INTEGER DEFAULT (strftime('%s', 'now')),
+                updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+            )",
+            [],
+        )?;
+        
+        // Create index for user_profile
+        let _ = conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_user_profile_updated_at ON user_profile(updated_at)",
+            [],
+        );
+        
+        // Insert default user profile
+        conn.execute(
+            "INSERT INTO user_profile (id, name, bio) VALUES (1, 'Nazril', 'Steam User')",
+            [],
+        )?;
+    }
+    
+    println!("User profile table migration completed successfully");
     Ok(())
 }
 

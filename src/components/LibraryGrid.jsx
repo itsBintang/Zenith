@@ -84,12 +84,10 @@ function LibraryGrid({
     <div className={`library-container ${gridView ? 'library-grid-view' : 'library-list-view'}`}>
       {showHeader && (
         <div className="library-header">
-          <div className="library-header-left">
-            <h2 className="library-title">{title}</h2>
-            {games.length > 0 && (
-              <span className="library-count">{filteredGames.length}</span>
-            )}
-          </div>
+          <h2 className="library-title">{title}</h2>
+          {games.length > 0 && (
+            <span className="library-count">{filteredGames.length}</span>
+          )}
           {showRefresh && (
             <button 
               className={`library-refresh-btn ${isLoading ? 'loading' : ''}`} 
@@ -149,19 +147,25 @@ function LibraryGrid({
               onClick={() => onGameSelect && onGameSelect(game.app_id)}
             >
               <div className="game-card-image">
-                <img src={game.header_image} alt={game.name} />
-                <div className="game-card-overlay">
-                  <div className="game-card-playtime">
+                <img src={`https://steamcdn-a.akamaihd.net/steam/apps/${game.app_id}/library_600x900.jpg`} 
+                     onError={(e) => {
+                       // Fallback to header image if library image fails
+                       e.target.src = game.header_image;
+                     }}
+                     alt={game.name} />
+                {game.playtime_forever && game.playtime_forever > 0 && (
+                  <div className="game-card-playtime-badge">
                     <FiClock size={12} />
-                    <span>{formatPlayTime(game.playtime_forever || 0)}</span>
+                    <span>{formatPlayTime(game.playtime_forever)}</span>
                   </div>
+                )}
+                <div className="game-card-overlay">
                   <div className="game-card-play-button">
                     <FiPlay size={16} />
                   </div>
                 </div>
-              </div>
-              <div className="game-card-info">
-                <h3 className="game-card-title">{game.name}</h3>
+                <div className="game-card-gradient"></div>
+                <div className="game-card-title-overlay">{game.name}</div>
               </div>
             </div>
           ))}
