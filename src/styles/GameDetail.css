@@ -1310,6 +1310,34 @@
   font-style: italic;
 }
 
+/* Bypass Instructions */
+.bypass-instructions {
+  margin: 16px 0;
+  padding: 16px;
+  background: rgba(255, 140, 66, 0.1);
+  border: 1px solid rgba(255, 140, 66, 0.3);
+  border-radius: 12px;
+  text-align: left;
+}
+
+.instruction-header {
+  color: #ff8c42;
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.instruction-text {
+  color: #ffcc99;
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0;
+  font-style: italic;
+}
+
 /* Executable List */
 .executable-list {
   margin: 20px 0;

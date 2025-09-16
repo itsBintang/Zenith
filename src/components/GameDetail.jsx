@@ -188,6 +188,7 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
   const [gameExecutablePath, setGameExecutablePath] = useState(null);
   const [gameExecutables, setGameExecutables] = useState([]);
   const [loadingExecutables, setLoadingExecutables] = useState(false);
+  const [bypassNotes, setBypassNotes] = useState(null);
  
   // Update related states
   const [isUpdating, setIsUpdating] = useState(false);
@@ -394,15 +395,27 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
   const loadGameExecutables = async (gamePath) => {
     setLoadingExecutables(true);
     try {
-      console.log("🔍 Loading executables from:", gamePath);
-      const executables = await invoke("get_game_executables", { 
+      console.log("🔍 Loading bypass notes and executables from:", gamePath);
+      const bypassNotes = await invoke("get_bypass_notes", { 
         gamePath: gamePath
       });
       
-      console.log("📄 Found executables:", executables);
-      setGameExecutables(executables);
+      console.log("📝 Bypass notes:", bypassNotes);
+      console.log("📄 Executable list:", bypassNotes.exe_list);
+      
+      // Set executables from bypass notes
+      setGameExecutables(bypassNotes.exe_list || []);
+      setBypassNotes(bypassNotes);
+      
+      // If there are notes, show them in console
+      if (bypassNotes.has_notes) {
+        console.log("📋 Instructions:", bypassNotes.instructions);
+        if (bypassNotes.recommended_exe) {
+          console.log("🎯 Recommended exe:", bypassNotes.recommended_exe);
+        }
+      }
     } catch (error) {
-      console.error("Error loading executables:", error);
+      console.error("Error loading bypass notes:", error);
       setGameExecutables([]);
     } finally {
       setLoadingExecutables(false);
@@ -779,9 +792,6 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
 
               <div className="launch-popup-question">
                 <h4>🎮 Pilih executable untuk launch game:</h4>
-                <p className="question-subtitle">
-                  Pilih file .exe yang paling besar (biasanya itu main game). Bypass cuma work kalau launch dari sini!
-                </p>
               </div>
 
               <div className="executable-list">
@@ -792,21 +802,20 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
                   </div>
                 ) : gameExecutables.length > 0 ? (
                   gameExecutables.map((exe, index) => (
-                    <button
-                      key={exe.path}
-                      className={`executable-item ${index === 0 ? 'recommended' : ''}`}
-                      onClick={() => handleLaunchSelectedExecutable(exe.path, exe.name)}
-                    >
-                      <div className="executable-info">
-                        <div className="executable-name">
-                          {index === 0 && <span className="recommended-badge">🏆 RECOMMENDED</span>}
-                          <span className="exe-name">{exe.name}</span>
+                      <button
+                        key={exe.path}
+                        className="executable-item"
+                        onClick={() => handleLaunchSelectedExecutable(exe.path, exe.name)}
+                      >
+                        <div className="executable-info">
+                          <div className="executable-name">
+                            <span className="exe-name">{exe.name}</span>
+                          </div>
+                          <div className="executable-size">{exe.size_mb.toFixed(1)} MB</div>
                         </div>
-                        <div className="executable-size">{exe.size_mb.toFixed(1)} MB</div>
-                      </div>
-                      <FiPlay className="launch-icon-small" />
-                    </button>
-                  ))
+                        <FiPlay className="launch-icon-small" />
+                      </button>
+                    ))
                 ) : (
                   <div className="no-executables">
                     <p>No executable files found in game directory.</p>

@@ -39,6 +39,7 @@ pub struct BypassNotes {
     has_notes: bool,
     instructions: String,
     recommended_exe: Option<String>,
+    exe_list: Vec<GameExecutable>, // List of exe to show (from note or fallback)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -404,10 +405,27 @@ pub async fn get_game_executables(game_path: String) -> Result<Vec<GameExecutabl
 pub async fn get_bypass_notes(game_path: String) -> Result<BypassNotes, String> {
     println!("🔍 Looking for bypass notes in: {}", game_path);
     
-    let note_path = format!("{}/note.txt", game_path);
+    let note_txt_path = format!("{}/note.txt", game_path);
+    let note_path = format!("{}/note", game_path);
+    let mut exe_list = Vec::new();
     
-    if Path::new(&note_path).exists() {
-        match fs::read_to_string(&note_path) {
+    println!("📝 Checking for note.txt at: {}", note_txt_path);
+    println!("📝 Checking for note at: {}", note_path);
+    
+    // Check for note.txt first, then note without extension
+    let (found_note_path, has_note_file) = if Path::new(&note_txt_path).exists() {
+        println!("✅ Found note.txt");
+        (note_txt_path, true)
+    } else if Path::new(&note_path).exists() {
+        println!("✅ Found note (without extension)");
+        (note_path, true)
+    } else {
+        println!("❌ No note file found");
+        (String::new(), false)
+    };
+    
+    if has_note_file {
+        match fs::read_to_string(&found_note_path) {
             Ok(content) => {
                 let trimmed_content = content.trim().to_string();
                 println!("📝 Found bypass notes: {}", trimmed_content);
@@ -415,72 +433,146 @@ pub async fn get_bypass_notes(game_path: String) -> Result<BypassNotes, String> 
                 // Try to extract recommended exe from content
                 let recommended_exe = extract_recommended_exe(&trimmed_content);
                 
+                // If we found an exe in note, create exe_list with only that exe
+                if let Some(ref exe_name) = recommended_exe {
+                    let exe_path = format!("{}/{}", game_path, exe_name);
+                    if Path::new(&exe_path).exists() {
+                        if let Ok(metadata) = fs::metadata(&exe_path) {
+                            let size_mb = metadata.len() as f64 / 1_048_576.0;
+                            exe_list.push(GameExecutable {
+                                name: exe_name.clone(),
+                                path: exe_path,
+                                size_mb,
+                            });
+                            println!("🎯 Using ONLY exe from note: {} ({:.1} MB)", exe_name, size_mb);
+                        } else {
+                            println!("❌ Exe from note exists but cannot read metadata: {}", exe_name);
+                        }
+                    } else {
+                        println!("❌ Exe from note not found at path: {}", exe_path);
+                        // Don't fallback to scanning - if note specifies an exe, only use that
+                    }
+                } else {
+                    println!("⚠️ No exe extracted from note content, will not show any exe");
+                    // If note exists but no exe found, don't show any executables
+                }
+                
                 Ok(BypassNotes {
                     has_notes: true,
                     instructions: trimmed_content,
                     recommended_exe,
+                    exe_list,
                 })
             }
             Err(e) => {
                 println!("❌ Failed to read note.txt: {}", e);
+                // Fallback to scanning all exe
+                exe_list = scan_executables(&game_path).await?;
                 Ok(BypassNotes {
                     has_notes: false,
                     instructions: "".to_string(),
                     recommended_exe: None,
+                    exe_list,
                 })
             }
         }
     } else {
-        println!("📝 No note.txt found");
+        println!("📝 No note.txt found, scanning for executables...");
+        // Fallback to scanning all exe
+        exe_list = scan_executables(&game_path).await?;
         Ok(BypassNotes {
             has_notes: false,
             instructions: "".to_string(), 
             recommended_exe: None,
+            exe_list,
         })
     }
 }
 
+async fn scan_executables(game_path: &str) -> Result<Vec<GameExecutable>, String> {
+    let mut executables = Vec::new();
+
+    for entry in WalkDir::new(game_path).max_depth(2) {
+        if let Ok(entry) = entry {
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(extension) = path.extension() {
+                    if extension == "exe" {
+                        if let Some(file_name) = path.file_name() {
+                            let file_name_str = file_name.to_string_lossy().to_string();
+                            let file_size = path.metadata().map(|m| m.len()).unwrap_or(0);
+                            let size_mb = file_size as f64 / 1_048_576.0;
+
+                            executables.push(GameExecutable {
+                                name: file_name_str,
+                                path: path.to_string_lossy().to_string(),
+                                size_mb,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Sort alphabetically (no priority)
+    executables.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    
+    Ok(executables)
+}
+
 fn extract_recommended_exe(content: &str) -> Option<String> {
-    // Look for patterns like "Open Game with xxx.exe" or "Run xxx.exe"
+    println!("🔍 Extracting exe from note content: '{}'", content);
+    
+    // First, try to find any .exe file mentioned
+    if let Some(exe_pos) = content.find(".exe") {
+        // Find the start of the exe name by looking backwards for a space or start of string
+        let before_exe = &content[..exe_pos];
+        let exe_start = before_exe.rfind(' ').map(|pos| pos + 1).unwrap_or(0);
+        let exe_name = &content[exe_start..exe_pos + 4]; // +4 for ".exe"
+        let cleaned_exe = exe_name.trim().to_string();
+        
+        println!("🎯 Extracted exe name: '{}'", cleaned_exe);
+        return Some(cleaned_exe);
+    }
+    
+    // If no .exe found, try to extract from common patterns
     let content_lower = content.to_lowercase();
     
     // Pattern 1: "open game with xxx.exe"
     if let Some(start) = content_lower.find("open game with ") {
-        let after_with = &content_lower[start + 15..];
+        let after_with = &content[start + 15..];
         if let Some(end) = after_with.find(".exe") {
             let exe_name = &after_with[..end + 4];
-            return Some(exe_name.to_string());
+            let cleaned = exe_name.trim().to_string();
+            println!("🎯 Found via 'open game with' pattern: '{}'", cleaned);
+            return Some(cleaned);
         }
     }
     
     // Pattern 2: "run xxx.exe"
     if let Some(start) = content_lower.find("run ") {
-        let after_run = &content_lower[start + 4..];
+        let after_run = &content[start + 4..];
         if let Some(end) = after_run.find(".exe") {
             let exe_name = &after_run[..end + 4];
-            return Some(exe_name.trim().to_string());
+            let cleaned = exe_name.trim().to_string();
+            println!("🎯 Found via 'run' pattern: '{}'", cleaned);
+            return Some(cleaned);
         }
     }
     
     // Pattern 3: "launch xxx.exe"
     if let Some(start) = content_lower.find("launch ") {
-        let after_launch = &content_lower[start + 7..];
+        let after_launch = &content[start + 7..];
         if let Some(end) = after_launch.find(".exe") {
             let exe_name = &after_launch[..end + 4];
-            return Some(exe_name.trim().to_string());
+            let cleaned = exe_name.trim().to_string();
+            println!("🎯 Found via 'launch' pattern: '{}'", cleaned);
+            return Some(cleaned);
         }
     }
     
-    // Pattern 4: Just find any .exe mentioned
-    if let Some(exe_start) = content_lower.find(".exe") {
-        // Look backwards for the exe name
-        let before_exe = &content_lower[..exe_start];
-        if let Some(space_pos) = before_exe.rfind(' ') {
-            let exe_name = &before_exe[space_pos + 1..];
-            return Some(format!("{}.exe", exe_name));
-        }
-    }
-    
+    println!("❌ No exe name found in note content");
     None
 }
 
