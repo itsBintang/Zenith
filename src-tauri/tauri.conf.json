@@ -51,7 +51,7 @@
                },
     "productName":  "Zenith Launcher",
     "mainBinaryName":  "Zenith Launcher",
-    "version":  "1.5.0",
+    "version":  "2.1.0",
     "identifier":  "com.zenith.launcher",
     "plugins":  {
                     "updater":  {
@@ -70,7 +70,12 @@
                                     "height":  600,
                                     "resizable":  true,
                                     "title":  "Zenith",
-                                    "width":  800
+                                    "width":  800,
+                                    "decorations":  false,
+                                    "transparent":  true,
+                                    "center":  true,
+                                    "minWidth":  400,
+                                    "minHeight":  300
                                 }
                             ],
                 "security":  {

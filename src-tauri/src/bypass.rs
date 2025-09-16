@@ -8,7 +8,6 @@ use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::command;
 use tauri::Emitter;
-use tauri_plugin_updater::UpdaterExt;
 use walkdir::WalkDir;
 use zip::ZipArchive;
 use crate::DOWNLOAD_CLIENT;
@@ -608,19 +607,7 @@ pub async fn launch_game_executable(executable_path: String, game_path: String) 
     Ok(())
 }
 
-#[command]
-pub async fn check_for_updates(window: tauri::Window) -> Result<(), String> {
-    window.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-#[command]
-pub async fn install_update(window: tauri::Window) -> Result<(), String> {
-    if let Some(update) = window.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())? {
-        update.download_and_install(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
+// Update functions moved to main.rs - these were incorrectly placed here during refactor
 
 async fn download_bypass_from_multiple_sources(
     window: &tauri::Window,

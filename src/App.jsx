@@ -1,5 +1,6 @@
 import React from "react";
 import { invoke } from "@tauri-apps/api/core";
+import CustomTitleBar from "./components/CustomTitleBar";
 import Sidebar from "./components/Sidebar";
 import Home from "./components/Home";
 import Catalogue from "./components/Catalogue";
@@ -179,12 +180,15 @@ function App() {
   // Show loading screen during initialization
   if (isLoading) {
     return (
-      <LoadingScreen 
-        progress={loadingProgress}
-        currentStep={loadingStep}
-        isComplete={loadingProgress >= 100}
-        error={initError}
-      />
+      <div className="app-container">
+        <CustomTitleBar theme="app-theme" />
+        <LoadingScreen 
+          progress={loadingProgress}
+          currentStep={loadingStep}
+          isComplete={loadingProgress >= 100}
+          error={initError}
+        />
+      </div>
     );
   }
 
@@ -225,20 +229,30 @@ function App() {
   }
 
   return (
-    <div className="ui-shell">
-      <Sidebar 
-        active={route} 
-        onNavigate={setRoute} 
-        onGameSelect={handleLibraryGameSelect}
-        onProfileClick={handleProfileClick}
-        libraryState={libraryState}
-        onRefreshLibrary={refreshLibrary}
-        onUpdateFilter={updateLibraryFilter}
-        refreshProfileTrigger={profileRefreshTrigger}
-      />
-      <main className="ui-main">
-        {content}
-      </main>
+    <div className="app-container">
+      {/* Title bar theme options:
+          - "app-theme": Matches app background exactly (#0f0f10)
+          - "transparent": Fully transparent with blur effect
+          - "glass": Semi-transparent glass effect
+          - "sidebar-theme": Gradient that matches sidebar
+          - Default (no theme): Semi-transparent dark
+      */}
+      <CustomTitleBar theme="app-theme" />
+      <div className="ui-shell">
+        <Sidebar 
+          active={route} 
+          onNavigate={setRoute} 
+          onGameSelect={handleLibraryGameSelect}
+          onProfileClick={handleProfileClick}
+          libraryState={libraryState}
+          onRefreshLibrary={refreshLibrary}
+          onUpdateFilter={updateLibraryFilter}
+          refreshProfileTrigger={profileRefreshTrigger}
+        />
+        <main className="ui-main">
+          {content}
+        </main>
+      </div>
     </div>
   );
 }

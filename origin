@@ -2,26 +2,28 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
-mod database;
 mod models;
-mod bypass;
-mod steam_utils;
+mod database;
 
-use crate::steam_utils::{find_steam_config_path, find_steam_executable_path, update_lua_files};
-use futures::stream::{self, StreamExt};
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io::Cursor;
-use std::path::PathBuf;
+use std::io::{self, Cursor, Read, Write};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use futures::stream::{self, StreamExt};
+use regex::Regex;
 use std::process::Command;
-use std::time::Duration;
-use tauri::command;
+use tauri::{command, Emitter};
+use tauri_plugin_updater::UpdaterExt;
 use tempfile::TempDir;
+use tokio::time::sleep;
 use walkdir::WalkDir;
 use zip::ZipArchive;
-use tauri_plugin_updater::UpdaterExt;
+
+#[cfg(target_os = "windows")]
+use winreg::{enums::*, RegKey};
 
 fn sanitize_filename(name: &str) -> String {
     let mut out = String::with_capacity(name.len());
@@ -42,6 +44,35 @@ struct DownloadResult {
     file_path: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct BypassProgress {
+    step: String,
+    progress: f64,
+    app_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct BypassInfo {
+    url: String,
+    size: u64,
+    available: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct BypassStatus {
+    available: bool,
+    installing: bool,
+    installed: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct BypassResult {
+    success: bool,
+    message: String,
+    should_launch: bool,
+    game_executable_path: Option<String>,
+}
+
 // Old GameCache struct and CacheEntry removed - now using SQLite with granular TTL
 // All caching is now handled by database::legacy_adapter::LegacyGameCacheAdapter
 
@@ -50,14 +81,14 @@ lazy_static::lazy_static! {
         database::legacy_adapter::LegacyGameCacheAdapter::new()
             .expect("Failed to initialize SQLite game cache")
     };
-    pub static ref HTTP_CLIENT: reqwest::Client = {
+    static ref HTTP_CLIENT: reqwest::Client = {
         reqwest::Client::builder()
             .user_agent("zenith-launcher/1.0")
             .timeout(Duration::from_secs(30))
             .build()
             .expect("Failed to create HTTP client")
     };
-    pub static ref DOWNLOAD_CLIENT: reqwest::Client = {
+    static ref DOWNLOAD_CLIENT: reqwest::Client = {
         reqwest::Client::builder()
             .user_agent("zenith-launcher/1.0")
             .timeout(Duration::from_secs(600)) // 10 minutes for large downloads
@@ -65,6 +96,12 @@ lazy_static::lazy_static! {
             .build()
             .expect("Failed to create download HTTP client")
     };
+    
+    // Multiple bypass download sources with fallback mechanism
+    static ref BYPASS_SOURCES: Vec<&'static str> = vec![
+        "https://bypass.nzr.web.id",
+        "https://bypass1.nzr.web.id",
+    ];
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1173,7 +1210,7 @@ async fn fetch_game_name_simple(app_id: &str) -> Option<String> {
 
     // Check cache again after acquiring lock (another request might have completed)
     if let Some(cached_name) = GAME_CACHE.get_game_name(app_id).await {
-        GAME_CACHE.remove_request_lock(app_id).await;
+        GAME_CACHE.remove_request_lock(app_id);
         return Some(cached_name);
     }
 
@@ -1194,7 +1231,7 @@ async fn fetch_game_name_simple(app_id: &str) -> Option<String> {
                 if !resp.status().is_success() {
                     if resp.status().as_u16() == 429 {
                         println!("Rate limited by Steam API (429)");
-                        GAME_CACHE.record_error().await;
+                        GAME_CACHE.record_error();
                     }
                     return None;
                 }
@@ -1207,7 +1244,7 @@ async fn fetch_game_name_simple(app_id: &str) -> Option<String> {
                                 // Cache the result
                                 GAME_CACHE.set_game_name(app_id.to_string(), name.clone());
                                 // Reset error count on success
-                                GAME_CACHE.reset_error_count().await;
+                                GAME_CACHE.reset_error_count();
                                 return Some(name);
                             }
                         }
@@ -1221,7 +1258,7 @@ async fn fetch_game_name_simple(app_id: &str) -> Option<String> {
             }
             Err(e) => {
                 println!("Request failed: {}", e);
-                GAME_CACHE.record_error().await;
+                GAME_CACHE.record_error();
                 None
             }
         }
@@ -1229,7 +1266,7 @@ async fn fetch_game_name_simple(app_id: &str) -> Option<String> {
     .await;
 
     // Clean up the request lock
-    GAME_CACHE.remove_request_lock(app_id).await;
+    GAME_CACHE.remove_request_lock(app_id);
 
     result
 }
@@ -1255,14 +1292,14 @@ async fn get_game_details(app_id: String) -> Result<GameDetail, String> {
     let resp = match HTTP_CLIENT.get(&url).send().await {
         Ok(r) => r,
         Err(e) => {
-            GAME_CACHE.record_error().await;
+            GAME_CACHE.record_error();
             return Err(format!("Request failed: {}", e));
         }
     };
 
     if !resp.status().is_success() {
         if resp.status().as_u16() == 429 {
-            GAME_CACHE.record_error().await;
+            GAME_CACHE.record_error();
             return Err(
                 "Rate limited by Steam API (429). Please wait before trying again.".to_string(),
             );
@@ -1301,7 +1338,7 @@ async fn get_game_details(app_id: String) -> Result<GameDetail, String> {
     })?;
 
     // Reset error count on successful request
-    GAME_CACHE.reset_error_count().await;
+    GAME_CACHE.reset_error_count();
 
     let name = data
         .get("name")
@@ -1545,9 +1582,190 @@ async fn process_and_install_to_steam(
     ))
 }
 
+fn find_steam_config_path() -> Result<PathBuf, anyhow::Error> {
+    // Check common Windows Steam paths
+    let common_paths = [
+        "C:\\Program Files (x86)\\Steam\\config",
+        "C:\\Program Files\\Steam\\config",
+    ];
+
+    for path in common_paths.iter() {
+        let p = PathBuf::from(path);
+        if p.exists() {
+            return Ok(p);
+        }
+    }
+
+    // Try registry lookup (Windows only)
+    #[cfg(target_os = "windows")]
+    {
+        use winreg::{enums::*, RegKey};
+
+        if let Ok(hkcu) = RegKey::predef(HKEY_CURRENT_USER).open_subkey("Software\\Valve\\Steam") {
+            if let Ok(steam_path_str) = hkcu.get_value::<String, _>("SteamPath") {
+                let config_path = PathBuf::from(steam_path_str).join("config");
+                if config_path.exists() {
+                    return Ok(config_path);
+                }
+            }
+        }
+    }
+
+    Err(anyhow::anyhow!(
+        "Steam config directory not found. Please make sure Steam is installed."
+    ))
+}
+
+fn update_lua_files(
+    stplugin_dir: &Path,
+    app_id: &str,
+    manifest_map: &HashMap<String, String>,
+) -> Result<(), anyhow::Error> {
+    // Find LUA file for this app ID
+    if let Some(lua_file) = find_lua_file_for_appid(stplugin_dir, app_id)? {
+        println!("Updating LUA file: {:?}", lua_file);
+
+        let original_content = fs::read_to_string(&lua_file)?;
+        let mut updated_content = original_content.clone();
+        let mut updated_count = 0;
+
+        // Update existing manifest IDs
+        let re_replace = Regex::new(r#"setManifestid\s*\(\s*(\d+)\s*,\s*"(\d+)"\s*,\s*0\s*\)"#)?;
+        updated_content = re_replace
+            .replace_all(&updated_content, |caps: &regex::Captures| {
+                let depot_id = caps.get(1).unwrap().as_str();
+                let old_manifest_id = caps.get(2).unwrap().as_str();
+
+                if let Some(new_manifest_id) = manifest_map.get(depot_id) {
+                    if new_manifest_id != old_manifest_id {
+                        updated_count += 1;
+                        return format!(r#"setManifestid({}, "{}", 0)"#, depot_id, new_manifest_id);
+                    }
+                }
+                caps.get(0).unwrap().as_str().to_string()
+            })
+            .to_string();
+
+        // Append new manifest IDs that weren't in the file
+        let existing_depots: Vec<String> = re_replace
+            .captures_iter(&original_content)
+            .map(|cap| cap[1].to_string())
+            .collect();
+
+        let mut new_lines = Vec::new();
+        for (depot_id, manifest_id) in manifest_map {
+            if !existing_depots.contains(depot_id) {
+                new_lines.push(format!(
+                    r#"setManifestid({}, "{}", 0)"#,
+                    depot_id, manifest_id
+                ));
+                updated_count += 1;
+            }
+        }
+
+        if !new_lines.is_empty() {
+            updated_content.push_str("\n-- Updated by Zenith --\n");
+            updated_content.push_str(&new_lines.join("\n"));
+            updated_content.push('\n');
+        }
+
+        if updated_count > 0 {
+            fs::write(&lua_file, updated_content)?;
+            println!("Updated {} manifest entries in LUA file", updated_count);
+        }
+    }
+
+    Ok(())
+}
+
+fn find_lua_file_for_appid(
+    stplugin_dir: &Path,
+    app_id: &str,
+) -> Result<Option<PathBuf>, anyhow::Error> {
+    for entry in WalkDir::new(stplugin_dir)
+        .max_depth(1)
+        .into_iter()
+        .filter_map(Result::ok)
+    {
+        if entry.file_type().is_file() {
+            let path = entry.path();
+            if let Some(ext) = path.extension() {
+                if ext == "lua" {
+                    // Check if filename matches AppID (e.g., 413150.lua)
+                    if let Some(stem) = path.file_stem() {
+                        if stem.to_string_lossy() == app_id {
+                            return Ok(Some(path.to_path_buf()));
+                        }
+                    }
+
+                    // Check if file content contains addappid(AppID)
+                    if let Ok(content) = fs::read_to_string(path) {
+                        let re = Regex::new(&format!(r"addappid\s*\(\s*({})\s*\)", app_id))?;
+                        if re.is_match(&content) {
+                            return Ok(Some(path.to_path_buf()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(None)
+}
+
 #[command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! Welcome to Zenith!", name)
+}
+
+// Helper function to find Steam executable path
+fn find_steam_executable_path() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use winreg::enums::*;
+        use winreg::RegKey;
+
+        // Try to get Steam path from registry
+        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+        if let Ok(steam_key) = hklm.open_subkey("SOFTWARE\\WOW6432Node\\Valve\\Steam") {
+            if let Ok(install_path) = steam_key.get_value::<String, _>("InstallPath") {
+                let steam_exe = format!("{}\\steam.exe", install_path);
+                if std::path::Path::new(&steam_exe).exists() {
+                    return Ok(steam_exe);
+                }
+            }
+        }
+
+        // Try 32-bit registry path
+        if let Ok(steam_key) = hklm.open_subkey("SOFTWARE\\Valve\\Steam") {
+            if let Ok(install_path) = steam_key.get_value::<String, _>("InstallPath") {
+                let steam_exe = format!("{}\\steam.exe", install_path);
+                if std::path::Path::new(&steam_exe).exists() {
+                    return Ok(steam_exe);
+                }
+            }
+        }
+
+        // Fallback to common installation paths
+        let common_paths = vec![
+            "C:\\Program Files (x86)\\Steam\\steam.exe",
+            "C:\\Program Files\\Steam\\steam.exe",
+        ];
+
+        for path in common_paths {
+            if std::path::Path::new(path).exists() {
+                return Ok(path.to_string());
+            }
+        }
+
+        Err("Steam installation not found".to_string())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        // For Linux/macOS, assume steam is in PATH
+        Ok("steam".to_string())
+    }
 }
 
 #[command]
@@ -1776,7 +1994,6 @@ async fn get_batch_game_details(app_ids: Vec<String>) -> Result<Vec<GameDetail>,
         api_calls,
         details_list.len()
     );
-    GAME_CACHE.cache_stats();
     Ok(details_list)
 }
 
@@ -1997,10 +2214,895 @@ async fn remove_game(app_id: String) -> Result<DownloadResult, String> {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
-struct CacheDebugInfo {
-    last_error_timestamp: Option<i64>,
+// ====================== BYPASS FUNCTIONS ======================
+
+#[command]
+async fn check_bypass_availability(app_id: String) -> Result<BypassStatus, String> {
+    println!("Checking bypass availability for AppID: {}", app_id);
+
+    // Check if bypass already installed first
+    let is_installed = check_bypass_installed(&app_id).await.unwrap_or(false);
+
+    // Try multiple sources to check availability
+    for (index, source) in BYPASS_SOURCES.iter().enumerate() {
+        let bypass_url = format!("{}/{}.zip", source, app_id);
+        println!("🔍 Checking source {} of {}: {}", index + 1, BYPASS_SOURCES.len(), source);
+
+        // HEAD request untuk cek file exists + size
+        match DOWNLOAD_CLIENT.head(&bypass_url).send().await {
+            Ok(response) => {
+                if response.status().is_success() {
+                    println!("✅ Bypass found at source: {}", source);
+                    return Ok(BypassStatus {
+                        available: true,
+                        installing: false,
+                        installed: is_installed,
+                    });
+                } else {
+                    println!("❌ Source {} returned status: {}", source, response.status());
+                }
+            }
+            Err(e) => {
+                println!("❌ Error checking source {}: {}", source, e);
+            }
+        }
+    }
+
+    println!("❌ Bypass not available from any source");
+    Ok(BypassStatus {
+        available: false,
+        installing: false,
+        installed: is_installed,
+    })
 }
+
+async fn check_bypass_installed(app_id: &str) -> Result<bool, String> {
+    // Check if bypass files exist in game directory
+    match find_steam_installation_path() {
+        Ok(steam_path) => {
+            match find_game_folder_from_acf(app_id, &steam_path).await {
+                Some(game_folder) => {
+                    let game_path = format!("{}/steamapps/common/{}", steam_path, game_folder);
+
+                    // Check for bypass installation marker
+                    let bypass_indicators = vec!["bypass_installed.txt"];
+
+                    for indicator in bypass_indicators {
+                        let indicator_path = format!("{}/{}", game_path, indicator);
+                        if Path::new(&indicator_path).exists() {
+                            return Ok(true);
+                        }
+                    }
+                    Ok(false)
+                }
+                None => Ok(false),
+            }
+        }
+        Err(_) => Ok(false),
+    }
+}
+
+#[command]
+async fn install_bypass(app_id: String, window: tauri::Window) -> Result<BypassResult, String> {
+    // Check if bypass is already installed
+    let is_reinstall = check_bypass_installed(&app_id).await.unwrap_or(false);
+
+    if is_reinstall {
+        println!("🔄 Starting bypass REINSTALLATION for AppID: {}", app_id);
+        println!("   (Previous installation detected - will overwrite)");
+    } else {
+        println!("🚀 Starting bypass installation for AppID: {}", app_id);
+    }
+    println!("================================");
+
+    let emit_progress = |step: &str, progress: f64| {
+        println!("📊 Progress: {:.1}% - {}", progress, step);
+        let _ = window.emit(
+            "bypass_progress",
+            BypassProgress {
+                step: step.to_string(),
+                progress,
+                app_id: app_id.clone(),
+            },
+        );
+    };
+
+    let action_word = if is_reinstall {
+        "reinstallation"
+    } else {
+        "installation"
+    };
+    emit_progress(&format!("Initializing bypass {}...", action_word), 0.0);
+
+    // Step 1: Detect Steam installation
+    emit_progress("Detecting Steam installation...", 10.0);
+    let steam_path = find_steam_installation_path()
+        .map_err(|e| format!("Steam installation not found: {}", e))?;
+
+    // Step 2: Validate game installation
+    emit_progress("Validating game installation...", 20.0);
+    let game_folder = find_game_folder_from_acf(&app_id, &steam_path)
+        .await
+        .ok_or_else(|| "Game not found in Steam library or not fully installed".to_string())?;
+    println!("📁 Found game folder: {}", game_folder);
+
+    let game_path = format!("{}/steamapps/common/{}", steam_path, game_folder);
+    println!("🎯 Full game path: {}", game_path);
+
+    if !Path::new(&game_path).exists() {
+        let error_msg = format!("Game directory does not exist: {}", game_path);
+        println!("❌ {}", error_msg);
+        return Err(error_msg);
+    }
+
+    println!("✅ Game directory validated successfully");
+
+    // Step 3: Check bypass availability and find working source
+    emit_progress("Checking bypass availability...", 30.0);
+    
+    // Step 4: Download bypass from multiple sources
+    emit_progress("Downloading bypass files...", 40.0);
+
+    let download_path = download_bypass_from_multiple_sources(&window, &app_id)
+        .await
+        .map_err(|e| {
+            println!("❌ Download completely failed: {}", e);
+            format!("Failed to download bypass: {}", e)
+        })?;
+
+    // Step 5: Extract bypass
+    emit_progress("Extracting bypass files...", 70.0);
+    let extract_path = extract_bypass(&download_path)
+        .await
+        .map_err(|e| format!("Failed to extract bypass: {}", e))?;
+
+    // Step 6: Install bypass files
+    emit_progress("Installing bypass to game directory...", 85.0);
+    install_bypass_files(&extract_path, &game_path)
+        .await
+        .map_err(|e| format!("Failed to install bypass: {}", e))?;
+
+    // Step 7: Cleanup
+    emit_progress("Finalizing installation...", 95.0);
+    cleanup_temp_files(&download_path, &extract_path)?;
+    println!("🧹 Cleaned up temporary files");
+
+    // Mark bypass as installed
+    let installed_marker = format!("{}/bypass_installed.txt", game_path);
+    let timestamp = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S");
+    let marker_content = format!(
+        "Bypass installed by Zenith\nAppID: {}\nInstalled: {}\nGame Path: {}",
+        app_id, timestamp, game_path
+    );
+    let _ = fs::write(&installed_marker, marker_content);
+    println!("📝 Created installation marker");
+
+    let final_message = if is_reinstall {
+        "Bypass reinstalled successfully!"
+    } else {
+        "Bypass installed successfully!"
+    };
+
+    emit_progress(final_message, 100.0);
+
+    println!("🎉 Bypass {} completed successfully!", action_word);
+    println!("🎯 Always showing launch popup - user can choose executable");
+    println!("📁 Game directory: {}", game_path);
+    println!("================================");
+
+    // Always show launch popup and let user navigate to executable
+    Ok(BypassResult {
+        success: true,
+        message: final_message.to_string(),
+        should_launch: true,                   // Always true - show popup
+        game_executable_path: Some(game_path), // Pass game directory path
+    })
+}
+
+async fn find_game_folder_from_acf(app_id: &str, steam_path: &str) -> Option<String> {
+    let steamapps_path = format!("{}/steamapps", steam_path);
+    let acf_file = format!("{}/appmanifest_{}.acf", steamapps_path, app_id);
+
+    if let Ok(content) = fs::read_to_string(&acf_file) {
+        // Parse ACF untuk cari "installdir"
+        for line in content.lines() {
+            if line.contains("\"installdir\"") {
+                if let Some(folder) = line.split('"').nth(3) {
+                    return Some(folder.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+fn find_steam_installation_path() -> Result<String, String> {
+    // Fixed Steam path as requested
+    let steam_path = "C:\\Program Files (x86)\\Steam";
+
+    if Path::new(&format!("{}/steam.exe", steam_path)).exists() {
+        return Ok(steam_path.to_string());
+    }
+
+    // Fallback to registry lookup if fixed path doesn't work
+    #[cfg(target_os = "windows")]
+    {
+        use winreg::{enums::*, RegKey};
+
+        if let Ok(hklm) =
+            RegKey::predef(HKEY_LOCAL_MACHINE).open_subkey("SOFTWARE\\WOW6432Node\\Valve\\Steam")
+        {
+            if let Ok(install_path) = hklm.get_value::<String, _>("InstallPath") {
+                if Path::new(&format!("{}/steam.exe", install_path)).exists() {
+                    return Ok(install_path);
+                }
+            }
+        }
+
+        if let Ok(hklm) = RegKey::predef(HKEY_LOCAL_MACHINE).open_subkey("SOFTWARE\\Valve\\Steam") {
+            if let Ok(install_path) = hklm.get_value::<String, _>("InstallPath") {
+                if Path::new(&format!("{}/steam.exe", install_path)).exists() {
+                    return Ok(install_path);
+                }
+            }
+        }
+    }
+
+    // Additional fallback paths
+    let fallback_paths = vec!["C:\\Program Files\\Steam", "D:\\Steam", "E:\\Steam"];
+
+    for path in fallback_paths {
+        if Path::new(&format!("{}/steam.exe", path)).exists() {
+            return Ok(path.to_string());
+        }
+    }
+
+    Err("Steam installation not found".to_string())
+}
+
+async fn download_bypass_from_multiple_sources(
+    window: &tauri::Window,
+    app_id: &str,
+) -> Result<String, String> {
+    println!("📥 Starting bypass download from multiple sources");
+
+    let mut all_errors = Vec::new();
+
+    // Try each source
+    for (source_index, source) in BYPASS_SOURCES.iter().enumerate() {
+        let bypass_url = format!("{}/{}.zip", source, app_id);
+        println!("🔄 Trying source {} of {}: {}", source_index + 1, BYPASS_SOURCES.len(), source);
+
+        match download_bypass_with_progress(&bypass_url, window, app_id).await {
+            Ok(path) => {
+                println!("✅ Download successful from source: {}", source);
+                return Ok(path);
+            }
+            Err(e) => {
+                let error_msg = format!("Source {} failed: {}", source, e);
+                println!("❌ {}", error_msg);
+                all_errors.push(error_msg);
+
+                // Wait a bit before trying next source (except for last source)
+                if source_index < BYPASS_SOURCES.len() - 1 {
+                    println!("⏳ Waiting 2 seconds before trying next source...");
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                }
+            }
+        }
+    }
+
+    let combined_errors = all_errors.join("; ");
+    Err(format!(
+        "Download failed from all {} sources. Errors: {}",
+        BYPASS_SOURCES.len(),
+        combined_errors
+    ))
+}
+
+async fn download_bypass_with_progress(
+    bypass_url: &str,
+    window: &tauri::Window,
+    app_id: &str,
+) -> Result<String, String> {
+    println!("📥 Starting download from: {}", bypass_url);
+
+    // Try download with retry mechanism
+    let mut last_error = String::new();
+
+    for attempt in 1..=3 {
+        println!("🔄 Download attempt {} of 3", attempt);
+
+        match download_bypass_attempt(bypass_url, window, app_id, attempt).await {
+            Ok(path) => {
+                println!("✅ Download successful on attempt {}", attempt);
+                return Ok(path);
+            }
+            Err(e) => {
+                last_error = e.clone();
+                println!("❌ Attempt {} failed: {}", attempt, e);
+
+                if attempt < 3 {
+                    println!("⏳ Waiting 3 seconds before retry...");
+                    tokio::time::sleep(Duration::from_secs(3)).await;
+                }
+            }
+        }
+    }
+
+    Err(format!(
+        "Download failed after 3 attempts. Last error: {}",
+        last_error
+    ))
+}
+
+async fn download_bypass_attempt(
+    bypass_url: &str,
+    window: &tauri::Window,
+    app_id: &str,
+    attempt: u32,
+) -> Result<String, String> {
+    let mut response = DOWNLOAD_CLIENT
+        .get(bypass_url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to start download: {}", e))?;
+
+    if !response.status().is_success() {
+        let error_msg = format!("Download failed with status: {}", response.status());
+        return Err(error_msg);
+    }
+
+    let total_size = response.content_length().unwrap_or(0);
+    println!(
+        "📦 Download size: {:.2} MB",
+        total_size as f64 / 1_048_576.0
+    );
+
+    let temp_dir = std::env::temp_dir();
+    let download_path = temp_dir.join(format!(
+        "bypass_{}_{}_{}.zip",
+        app_id,
+        attempt,
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+    ));
+
+    let mut file =
+        File::create(&download_path).map_err(|e| format!("Failed to create temp file: {}", e))?;
+
+    let mut downloaded = 0u64;
+    let mut last_progress_time = std::time::Instant::now();
+
+    println!("📊 Starting download stream (attempt {})...", attempt);
+
+    while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+        file.write_all(&chunk).map_err(|e| e.to_string())?;
+        downloaded += chunk.len() as u64;
+
+        // Update progress every 500ms to avoid spam
+        if last_progress_time.elapsed() >= Duration::from_millis(500) {
+            if total_size > 0 {
+                let progress = (downloaded as f64 / total_size as f64) * 30.0 + 40.0;
+                let speed_mbps =
+                    (downloaded as f64 / 1_048_576.0) / last_progress_time.elapsed().as_secs_f64();
+
+                let _ = window.emit(
+                    "bypass_progress",
+                    BypassProgress {
+                        step: format!(
+                            "Downloading... {:.1} MB / {:.1} MB ({:.1} MB/s)",
+                            downloaded as f64 / 1_048_576.0,
+                            total_size as f64 / 1_048_576.0,
+                            speed_mbps
+                        ),
+                        progress,
+                        app_id: app_id.to_string(),
+                    },
+                );
+            }
+            last_progress_time = std::time::Instant::now();
+        }
+    }
+
+    println!("✅ Download completed: {}", download_path.display());
+    Ok(download_path.to_string_lossy().to_string())
+}
+
+async fn extract_bypass(zip_path: &str) -> Result<String, String> {
+    println!("📂 Extracting bypass files from: {}", zip_path);
+
+    let extract_dir = std::env::temp_dir().join(format!(
+        "bypass_extract_{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+    ));
+
+    fs::create_dir_all(&extract_dir).map_err(|e| e.to_string())?;
+    println!("📁 Extract directory: {}", extract_dir.display());
+
+    let file = File::open(zip_path).map_err(|e| e.to_string())?;
+    let mut archive = ZipArchive::new(file).map_err(|e| e.to_string())?;
+
+    println!("📋 Archive contains {} files", archive.len());
+
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
+        let outpath = match file.enclosed_name() {
+            Some(path) => extract_dir.join(path),
+            None => continue,
+        };
+
+        if file.name().ends_with('/') {
+            fs::create_dir_all(&outpath).map_err(|e| e.to_string())?;
+        } else {
+            if let Some(p) = outpath.parent() {
+                fs::create_dir_all(p).map_err(|e| e.to_string())?;
+            }
+            let mut outfile = File::create(&outpath).map_err(|e| e.to_string())?;
+            io::copy(&mut file, &mut outfile).map_err(|e| e.to_string())?;
+        }
+    }
+
+    println!("✅ Extraction completed to: {}", extract_dir.display());
+    Ok(extract_dir.to_string_lossy().to_string())
+}
+
+async fn install_bypass_files(extract_path: &str, game_path: &str) -> Result<(), String> {
+    println!("🔧 Installing bypass files");
+    println!("   Source: {}", extract_path);
+    println!("   Target: {}", game_path);
+
+    // Find the actual bypass files - they might be in a subfolder
+    let bypass_source = find_bypass_files_directory(extract_path)?;
+    println!("🎯 Bypass files found in: {}", bypass_source);
+
+    // Copy files directly to game directory (flatten structure)
+    copy_bypass_files_flat(&bypass_source, game_path)?;
+    println!("✅ Bypass files installed successfully");
+
+    Ok(())
+}
+
+// Find where the actual bypass files are located (might be in subfolder)
+fn find_bypass_files_directory(extract_path: &str) -> Result<String, String> {
+    let extract_dir = Path::new(extract_path);
+
+    // First, check if there are executable files directly in extract path
+    let mut has_exe_files = false;
+    let mut has_dll_files = false;
+
+    if let Ok(entries) = fs::read_dir(extract_dir) {
+        for entry in entries.filter_map(Result::ok) {
+            if let Some(ext) = entry.path().extension() {
+                let ext_str = ext.to_string_lossy().to_lowercase();
+                if ext_str == "exe" {
+                    has_exe_files = true;
+                }
+                if ext_str == "dll" {
+                    has_dll_files = true;
+                }
+            }
+        }
+    }
+
+    // If we have bypass files directly in extract path, use it
+    if has_exe_files || has_dll_files {
+        println!("📁 Bypass files found directly in extract directory");
+        return Ok(extract_path.to_string());
+    }
+
+    // Otherwise, look for subfolder containing bypass files
+    println!("🔍 Searching for bypass files in subfolders...");
+
+    for entry in WalkDir::new(extract_dir).max_depth(2) {
+        if let Ok(entry) = entry {
+            let path = entry.path();
+            if path.is_dir() && path != extract_dir {
+                // Check if this directory contains bypass files
+                let mut exe_count = 0;
+                let mut dll_count = 0;
+
+                if let Ok(sub_entries) = fs::read_dir(path) {
+                    for sub_entry in sub_entries.filter_map(Result::ok) {
+                        if let Some(ext) = sub_entry.path().extension() {
+                            let ext_str = ext.to_string_lossy().to_lowercase();
+                            if ext_str == "exe" {
+                                exe_count += 1;
+                            }
+                            if ext_str == "dll" {
+                                dll_count += 1;
+                            }
+                        }
+                    }
+                }
+
+                // If this folder has multiple bypass files, it's likely the right one
+                if exe_count > 0 || dll_count > 2 {
+                    println!("📁 Found bypass files in subfolder: {}", path.display());
+                    println!(
+                        "   Contains: {} exe files, {} dll files",
+                        exe_count, dll_count
+                    );
+                    return Ok(path.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+
+    // Fallback to original extract path
+    println!("⚠️  Using original extract path as fallback");
+    Ok(extract_path.to_string())
+}
+
+// Copy bypass files directly to game directory (flatten folder structure)
+fn copy_bypass_files_flat(src: &str, dst: &str) -> Result<(), String> {
+    let src_path = Path::new(src);
+    let dst_path = Path::new(dst);
+
+    let mut files_replaced = 0;
+    let mut files_new = 0;
+
+    println!("📂 Installing bypass files from: {}", src_path.display());
+    println!("📂 Target directory: {}", dst_path.display());
+
+    for entry in WalkDir::new(src_path) {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+
+        if path.is_file() {
+            // Get just the filename (no folder structure)
+            let file_name = match path.file_name() {
+                Some(name) => name,
+                None => continue,
+            };
+
+            // Destination is directly in game root directory
+            let dest_file = dst_path.join(file_name);
+
+            println!("📄 Installing: {}", file_name.to_string_lossy());
+
+            let file_exists = dest_file.exists();
+
+            // Copy the file directly to game root (this will overwrite existing files)
+            fs::copy(path, &dest_file).map_err(|e| e.to_string())?;
+
+            if file_exists {
+                println!("   🔄 REPLACED existing file");
+                files_replaced += 1;
+            } else {
+                println!("   ✅ Added new file");
+                files_new += 1;
+            }
+        }
+    }
+
+    println!("📊 Installation Summary:");
+    println!("   🔄 Files replaced: {}", files_replaced);
+    println!("   ✅ New files added: {}", files_new);
+
+    Ok(())
+}
+
+async fn find_game_executable(game_path: &str) -> Option<String> {
+    println!("Searching for game executable in: {}", game_path);
+
+    let mut potential_executables = Vec::new();
+
+    for entry in WalkDir::new(game_path).max_depth(3) {
+        if let Ok(entry) = entry {
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(extension) = path.extension() {
+                    if extension == "exe" {
+                        let file_name = path.file_name()?.to_string_lossy().to_lowercase();
+                        let file_size = path.metadata().ok()?.len();
+
+                        println!(
+                            "Found executable: {} (size: {} bytes)",
+                            file_name, file_size
+                        );
+
+                        // Skip common non-game executables with more comprehensive list
+                        let skip_patterns = [
+                            "unins",
+                            "setup",
+                            "installer",
+                            "redist",
+                            "vcredist",
+                            "directx",
+                            "7za.exe",
+                            "7z.exe",
+                            "winrar",
+                            "rar",
+                            "zip",
+                            "unzip",
+                            "crash",
+                            "report",
+                            "dump",
+                            "log",
+                            "update",
+                            "patch",
+                            "config",
+                            "settings",
+                            "steam",
+                            "origin",
+                            "uplay",
+                            "epic",
+                            "gog",
+                            "battle",
+                            "blizzard",
+                            "nvidia",
+                            "amd",
+                            "intel",
+                            "microsoft",
+                            "visual",
+                            "dotnet",
+                            "framework",
+                            "runtime",
+                            "service",
+                            "helper",
+                            "tool",
+                            "util",
+                            "support",
+                            "driver",
+                            "ubisoftconnect",
+                            "uplayinstaller",
+                        ];
+
+                        let should_skip = skip_patterns
+                            .iter()
+                            .any(|pattern| file_name.contains(pattern));
+
+                        // Debug: show what we're checking
+                        println!(
+                            "   🔍 Checking: {} (size: {:.1} MB)",
+                            file_name,
+                            file_size as f64 / 1_048_576.0
+                        );
+                        println!("      Should skip: {}", should_skip);
+                        println!(
+                            "      Size check: {} > 1MB = {}",
+                            file_size,
+                            file_size > 1_000_000
+                        );
+
+                        // Only consider larger executables (likely main game executables)
+                        if !should_skip && file_size > 1_000_000 {
+                            // At least 1MB, but we'll sort by size
+                            potential_executables.push((
+                                path.to_string_lossy().to_string(),
+                                file_size,
+                                file_name.clone(),
+                            ));
+                            println!(
+                                "   ✅ ADDED as potential executable: {} ({:.1} MB)",
+                                file_name,
+                                file_size as f64 / 1_048_576.0
+                            );
+                        } else if should_skip {
+                            println!("   ⏭️  SKIPPED (utility file): {}", file_name);
+                        } else {
+                            println!(
+                                "   ⏭️  SKIPPED (too small): {} ({:.1} MB)",
+                                file_name,
+                                file_size as f64 / 1_048_576.0
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if potential_executables.is_empty() {
+        println!("❌ No suitable game executable found");
+        return None;
+    }
+
+    // Sort by file size (LARGEST FIRST - most likely to be the main game)
+    potential_executables.sort_by(|a, b| b.1.cmp(&a.1));
+
+    // Log all potential executables sorted by size
+    println!("🎯 Potential game executables found (sorted by size):");
+    for (i, (_path, size, name)) in potential_executables.iter().enumerate() {
+        let size_mb = *size as f64 / 1_048_576.0;
+        if i == 0 {
+            println!(
+                "  🏆 #{}: {} ({:.1} MB) - SELECTED (LARGEST)",
+                i + 1,
+                name,
+                size_mb
+            );
+        } else {
+            println!("  📄 #{}: {} ({:.1} MB)", i + 1, name, size_mb);
+        }
+    }
+
+    // Return the largest executable (index 0 after sorting)
+    let selected = &potential_executables[0];
+    let selected_size_mb = selected.1 as f64 / 1_048_576.0;
+
+    println!(
+        "✅ FINAL SELECTION: {} ({:.1} MB)",
+        selected.2, selected_size_mb
+    );
+    println!("   📁 Path: {}", selected.0);
+
+    Some(selected.0.clone())
+}
+
+fn cleanup_temp_files(download_path: &str, extract_path: &str) -> Result<(), String> {
+    // Remove download file
+    if Path::new(download_path).exists() {
+        fs::remove_file(download_path).map_err(|e| format!("Failed to cleanup download: {}", e))?;
+    }
+
+    // Remove extract directory
+    if Path::new(extract_path).exists() {
+        fs::remove_dir_all(extract_path)
+            .map_err(|e| format!("Failed to cleanup extract: {}", e))?;
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct GameExecutable {
+    name: String,
+    path: String,
+    size_mb: f64,
+}
+
+#[command]
+async fn get_game_executables(game_path: String) -> Result<Vec<GameExecutable>, String> {
+    println!("🔍 Scanning for executable files in: {}", game_path);
+
+    if !Path::new(&game_path).exists() {
+        return Err("Game folder does not exist".to_string());
+    }
+
+    let mut executables = Vec::new();
+
+    for entry in WalkDir::new(&game_path).max_depth(2) {
+        if let Ok(entry) = entry {
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(extension) = path.extension() {
+                    if extension == "exe" {
+                        if let Some(file_name) = path.file_name() {
+                            let file_name_str = file_name.to_string_lossy().to_string();
+                            let file_size = path.metadata().map(|m| m.len()).unwrap_or(0);
+                            let size_mb = file_size as f64 / 1_048_576.0;
+
+                            println!("📄 Found .exe: {} ({:.1} MB)", file_name_str, size_mb);
+
+                            executables.push(GameExecutable {
+                                name: file_name_str,
+                                path: path.to_string_lossy().to_string(),
+                                size_mb,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Sort by size (largest first)
+    executables.sort_by(|a, b| {
+        b.size_mb
+            .partial_cmp(&a.size_mb)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    println!("🎯 Found {} executable files:", executables.len());
+    for (i, exe) in executables.iter().enumerate() {
+        if i == 0 {
+            println!(
+                "  🏆 {}: {} ({:.1} MB) - LARGEST",
+                i + 1,
+                exe.name,
+                exe.size_mb
+            );
+        } else {
+            println!("  📄 {}: {} ({:.1} MB)", i + 1, exe.name, exe.size_mb);
+        }
+    }
+
+    Ok(executables)
+}
+
+#[command]
+async fn check_bypass_installed_command(app_id: String) -> Result<bool, String> {
+    check_bypass_installed(&app_id).await
+}
+
+#[command]
+async fn confirm_and_launch_game(
+    executable_path: String,
+    game_name: String,
+) -> Result<String, String> {
+    println!("🎮 User confirmed to launch game: {}", game_name);
+    println!("📁 Executable path: {}", executable_path);
+
+    launch_game_executable(executable_path).await
+}
+
+#[command]
+async fn launch_game_executable(executable_path: String) -> Result<String, String> {
+    println!("🚀 Attempting to launch game: {}", executable_path);
+
+    // Validate file exists
+    if !Path::new(&executable_path).exists() {
+        let error_msg = format!("Game executable not found: {}", executable_path);
+        println!("❌ {}", error_msg);
+        return Err(error_msg);
+    }
+
+    // Validate it's an .exe file
+    if !executable_path.to_lowercase().ends_with(".exe") {
+        let error_msg = format!("File is not an executable (.exe): {}", executable_path);
+        println!("❌ {}", error_msg);
+        return Err(error_msg);
+    }
+
+    // Check file size (should be reasonable for a game executable)
+    if let Ok(metadata) = std::fs::metadata(&executable_path) {
+        let file_size = metadata.len();
+        println!(
+            "📊 Executable size: {:.2} MB",
+            file_size as f64 / 1_048_576.0
+        );
+
+        if file_size < 500_000 {
+            // Less than 500KB seems too small for a game
+            println!("⚠️  Warning: Executable seems very small for a game");
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        println!("🎮 Launching game executable...");
+        match Command::new(&executable_path)
+            .current_dir(
+                Path::new(&executable_path)
+                    .parent()
+                    .unwrap_or(Path::new(".")),
+            )
+            .spawn()
+        {
+            Ok(child) => {
+                println!("✅ Game process started successfully!");
+                println!("   PID: {:?}", child.id());
+                println!("   Path: {}", executable_path);
+                println!("   Working Dir: {:?}", Path::new(&executable_path).parent());
+
+                // Don't wait for the game to finish, just confirm it started
+                Ok(
+                    "Game launched successfully! The game is now running with bypass enabled."
+                        .to_string(),
+                )
+            }
+            Err(e) => {
+                let error_msg = format!("Failed to launch game: {}", e);
+                println!("❌ {}", error_msg);
+                Err(error_msg)
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Game launching is only supported on Windows".to_string())
+    }
+}
+
+// ====================== END BYPASS FUNCTIONS ======================
 
 // ====================== UPDATER FUNCTIONS ======================
 
@@ -2029,7 +3131,7 @@ async fn check_for_updates(app: tauri::AppHandle) -> Result<String, String> {
                 }
             }
         }
-        Err(_e) => Err("Update service is not available at this time.".to_string())
+        Err(e) => Err("Update service is not available at this time.".to_string())
     }
 }
 
@@ -2073,237 +3175,11 @@ async fn install_update(app: tauri::AppHandle) -> Result<String, String> {
                 }
             }
         }
-        Err(_e) => Err("Update service is not available at this time.".to_string())
+        Err(e) => Err("Update service is not available at this time.".to_string())
     }
 }
 
-// ====================== CHANGELOG FUNCTIONS ======================
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ChangelogEntry {
-    version: String,
-    changes: Vec<ChangelogItem>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ChangelogItem {
-    #[serde(rename = "type")]
-    change_type: String,
-    description: String,
-    pr_number: Option<String>,
-    details: Option<String>,
-}
-
-#[command]
-async fn get_changelog() -> Result<ChangelogEntry, String> {
-    // Try to get changelog from GitHub releases first
-    match fetch_changelog_from_github().await {
-        Ok(changelog) => Ok(changelog),
-        Err(_) => {
-            // Fallback to local changelog
-            get_local_changelog()
-        }
-    }
-}
-
-async fn fetch_changelog_from_github() -> Result<ChangelogEntry, String> {
-    // Try multiple possible repository URLs
-    let possible_repos = vec![
-        "itsBintang/Zenith",           // Primary repository
-        "nazrilnazril/zenith-launcher",
-        "nazril/zenith-launcher", 
-        "nazrilnazril/Zenith",
-        "nazril/Zenith",
-    ];
-    
-    for repo in possible_repos {
-        let url = format!("https://api.github.com/repos/{}/releases/latest", repo);
-        
-        match try_fetch_changelog(&url).await {
-            Ok(changelog) => {
-                println!("✅ Successfully fetched changelog from: {}", repo);
-                return Ok(changelog);
-            }
-            Err(e) => {
-                println!("❌ Failed to fetch from {}: {}", repo, e);
-                continue;
-            }
-        }
-    }
-    
-    Err("Could not fetch changelog from any GitHub repository. Repository might be private or not exist.".to_string())
-}
-
-async fn try_fetch_changelog(url: &str) -> Result<ChangelogEntry, String> {
-    let resp = HTTP_CLIENT
-        .get(url)
-        .header("User-Agent", "zenith-launcher/1.0")
-        .header("Accept", "application/vnd.github.v3+json")
-        .timeout(std::time::Duration::from_secs(10))
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
-    
-    if !resp.status().is_success() {
-        return Err(format!("HTTP {}: {}", 
-            resp.status().as_u16(), 
-            resp.status().canonical_reason().unwrap_or("Unknown")
-        ));
-    }
-    
-    let release: serde_json::Value = resp.json().await
-        .map_err(|e| format!("JSON parse error: {}", e))?;
-    
-    let version = release
-        .get("tag_name")
-        .and_then(|v| v.as_str())
-        .unwrap_or("Unknown")
-        .to_string();
-    
-    let body = release
-        .get("body")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    
-    let changes = parse_github_changelog(&body);
-    
-    Ok(ChangelogEntry {
-        version,
-        changes,
-    })
-}
-
-fn parse_github_changelog(body: &str) -> Vec<ChangelogItem> {
-    let mut changes = Vec::new();
-    let mut current_category = "Changed".to_string();
-    
-    for line in body.lines() {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        
-        // Detect category headers (### Added, ### Fixed, etc.)
-        if line.starts_with("### ") {
-            let category = line[4..].trim();
-            current_category = match category.to_lowercase().as_str() {
-                "added" => "Added".to_string(),
-                "improved" | "changed" => "Improved".to_string(),
-                "fixed" | "bug fixes" => "Fixed".to_string(),
-                "removed" | "deprecated" => "Removed".to_string(),
-                "security" => "Security".to_string(),
-                _ => "Changed".to_string(),
-            };
-            continue;
-        }
-        
-        // Parse list items
-        if line.starts_with("- ") || line.starts_with("* ") {
-            let content = &line[2..].trim(); // Remove "- " or "* "
-            
-            // Extract PR number using regex pattern
-            let pr_number = if let Some(start) = content.find("(#") {
-                if let Some(end) = content[start..].find(')') {
-                    Some(content[start..start + end + 1].to_string())
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-            
-            // Remove PR number from description for cleaner text
-            let description = if let Some(pr_start) = content.find(" (#") {
-                content[..pr_start].trim().to_string()
-            } else {
-                content.to_string()
-            };
-            
-            // Skip empty descriptions
-            if !description.is_empty() {
-                changes.push(ChangelogItem {
-                    change_type: current_category.clone(),
-                    description: capitalize_first_letter(&description),
-                    pr_number,
-                    details: None,
-                });
-            }
-        }
-        
-        // Handle single line changes without bullets (fallback)
-        else if !line.starts_with("#") && !line.starts_with("**") && line.len() > 3 {
-            // Skip common GitHub auto-generated content
-            if line.contains("Full Changelog") || line.contains("compare/") {
-                continue;
-            }
-            
-            changes.push(ChangelogItem {
-                change_type: current_category.clone(),
-                description: capitalize_first_letter(&line),
-                pr_number: None,
-                details: None,
-            });
-        }
-    }
-    
-    // If no changes found, add a default entry
-    if changes.is_empty() {
-        changes.push(ChangelogItem {
-            change_type: "Updated".to_string(),
-            description: "See release notes for details".to_string(),
-            pr_number: None,
-            details: Some(body.trim().to_string()),
-        });
-    }
-    
-    changes
-}
-
-fn capitalize_first_letter(s: &str) -> String {
-    let mut chars = s.chars();
-    match chars.next() {
-        None => String::new(),
-        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-    }
-}
-
-fn get_local_changelog() -> Result<ChangelogEntry, String> {
-    // Fallback changelog data
-    let current_version = env!("CARGO_PKG_VERSION");
-    
-    Ok(ChangelogEntry {
-        version: format!("v{}", current_version),
-        changes: vec![
-            ChangelogItem {
-                change_type: "Added".to_string(),
-                description: "custom title bar with modern design".to_string(),
-                pr_number: Some("#45".to_string()),
-                details: Some("Implemented a sleek custom title bar with transparency support, window controls, and an integrated menu system for better user experience.".to_string()),
-            },
-            ChangelogItem {
-                change_type: "Added".to_string(),
-                description: "dropdown menu with essential options".to_string(),
-                pr_number: Some("#46".to_string()),
-                details: Some("Added a comprehensive dropdown menu in the title bar with options for user guide, issue reporting, feature requests, project support, changelog viewing, and update checking.".to_string()),
-            },
-            ChangelogItem {
-                change_type: "Improved".to_string(),
-                description: "update system with better error handling".to_string(),
-                pr_number: Some("#47".to_string()),
-                details: Some("Enhanced the auto-update functionality with proper error handling, user-friendly messages, and progress feedback for a smoother update experience.".to_string()),
-            },
-            ChangelogItem {
-                change_type: "Fixed".to_string(),
-                description: "null pointer error in update check function".to_string(),
-                pr_number: Some("#48".to_string()),
-                details: Some("Resolved TypeError that occurred when the update service returned null values, ensuring stable operation of the update checking mechanism.".to_string()),
-            },
-        ],
-    })
-}
-
-// ====================== END CHANGELOG FUNCTIONS ======================
+// ====================== END UPDATER FUNCTIONS ======================
 
 fn main() {
     tauri::Builder::default()
@@ -2324,25 +3200,20 @@ fn main() {
             get_dlcs_in_lua,
             sync_dlcs_in_lua,
             clear_cache,
-            refresh_cache_background,
-            remove_game,
-            commands::update_game_files,
-            // Bypass Commands
-            bypass::install_bypass,
-            bypass::install_bypass_with_type,
-            bypass::check_bypass_installed_command,
-            bypass::check_bypass_availability,
-            bypass::get_available_bypass_types,
-            bypass::get_game_executables,
-            bypass::get_bypass_notes,
-            bypass::confirm_and_launch_game,
-            bypass::launch_game_executable,
-            check_for_updates,
-            install_update,
-            get_changelog,
             // Debug commands
             database::commands::debug_cache_entry,
             database::commands::force_clear_cache,
+            refresh_cache_background,
+            remove_game,
+            check_bypass_availability,
+            check_bypass_installed_command,
+            install_bypass,
+            launch_game_executable,
+            confirm_and_launch_game,
+            get_game_executables,
+            check_for_updates,
+            install_update,
+            commands::update_game_files,
             // SQLite Database Management Commands
             database::commands::migrate_json_to_sqlite,
             database::commands::get_migration_status,
@@ -2357,17 +3228,16 @@ fn main() {
             database::commands::get_cache_config,
             // Profile Management Commands
             commands::get_user_profile,
-            commands::update_profile_field,
+            commands::save_user_profile,
             commands::upload_profile_image,
+            commands::get_profile_image_path,
             commands::get_profile_image_base64,
-            commands::reset_profile_to_default,
+            commands::update_profile_field,
             // Steam Path Management Commands
             commands::get_steam_path,
             commands::set_steam_path,
-            commands::detect_steam_path,
+            commands::detect_steam_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-
-

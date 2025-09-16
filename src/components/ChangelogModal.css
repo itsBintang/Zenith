@@ -1,0 +1,373 @@
+/* Changelog Modal Styles - Based on VSCode design */
+.changelog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.changelog-modal {
+  background: #1A1B1E; /* Darker background */
+  border: 1px solid #2A2B2E; /* Adjusted border */
+  border-radius: 8px;
+  width: 90%;
+  max-width: 800px;
+  max-height: 80vh;
+  overflow: hidden;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.4);
+  animation: slideIn 0.3s ease-out;
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Header */
+.changelog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px 20px 32px;
+  border-bottom: 1px solid #2A2B2E; /* Adjusted border */
+  background: transparent; /* Inherit from modal */
+}
+
+.changelog-title-section {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex: 1;
+}
+
+.changelog-title {
+  color: #cccccc;
+  font-size: 24px;
+  font-weight: 400;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.star-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #0e639c;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.star-button:hover {
+  background: #1177bb;
+  transform: translateY(-1px);
+}
+
+.star-button:active {
+  background: #0c5a8a;
+  transform: translateY(0);
+}
+
+.star-icon {
+  font-size: 14px;
+}
+
+.changelog-close {
+  background: none;
+  border: none;
+  color: #cccccc;
+  font-size: 24px;
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  margin-left: 16px;
+}
+
+.changelog-close:hover {
+  background: #3c3c3c;
+  color: white;
+}
+
+/* Content */
+.changelog-content {
+  flex: 1;
+  padding: 32px;
+  overflow-y: auto;
+  background: transparent; /* Inherit from modal */
+}
+
+.changelog-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.changelog-content::-webkit-scrollbar-track {
+  background: #2d2d30;
+}
+
+.changelog-content::-webkit-scrollbar-thumb {
+  background: #424242;
+  border-radius: 4px;
+}
+
+.changelog-content::-webkit-scrollbar-thumb:hover {
+  background: #4f4f4f;
+}
+
+.changelog-list {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #cccccc;
+}
+
+.changelog-group {
+  margin-bottom: 24px;
+}
+
+.changelog-group-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  color: #e6e6e6;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #3c3c3c;
+}
+
+.changelog-group ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+
+.changelog-entry {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+
+.changelog-entry::before {
+  content: '•';
+  color: #8b949e;
+  margin-right: 8px;
+}
+
+.change-description {
+  font-size: 15px;
+  color: #b0b0b0;
+}
+
+.change-pr {
+  font-size: 14px;
+  color: #8b949e;
+  font-family: 'Fira Code', 'Courier New', monospace;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.15s ease;
+}
+
+.change-pr:hover {
+  color: #0e639c;
+  text-decoration: underline;
+}
+
+/* Footer */
+.changelog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 20px 32px;
+  border-top: 1px solid #2A2B2E; /* Adjusted border */
+  background: transparent; /* Inherit from modal */
+}
+
+.changelog-button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.changelog-button.primary {
+  background: #0e639c;
+  color: white;
+}
+
+.changelog-button.primary:hover {
+  background: #1177bb;
+}
+
+.changelog-button.primary:active {
+  background: #0c5a8a;
+}
+
+.changelog-button.secondary {
+  background: transparent;
+  color: #cccccc;
+  border: 1px solid #3c3c3c;
+}
+
+.changelog-button.secondary:hover {
+  background: #3c3c3c;
+  border-color: #5a5a5a;
+  color: white;
+}
+
+.changelog-button.secondary:active {
+  background: #2d2d30;
+}
+
+/* Loading and Error States */
+.changelog-loading,
+.changelog-error,
+.changelog-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #3c3c3c;
+  border-top: 3px solid #0e639c;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.changelog-loading p,
+.changelog-error p,
+.changelog-empty p {
+  color: #969696;
+  font-size: 14px;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.retry-button {
+  background: #0e639c;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  margin-top: 12px;
+}
+
+.retry-button:hover {
+  background: #1177bb;
+}
+
+.retry-button:active {
+  background: #0c5a8a;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .changelog-modal {
+    width: 95%;
+    max-height: 90vh;
+  }
+  
+  .changelog-header {
+    padding: 20px 24px 16px 24px;
+  }
+  
+  .changelog-title-section {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  
+  .changelog-title {
+    font-size: 20px;
+  }
+  
+  .changelog-content {
+    padding: 24px;
+  }
+  
+  .changelog-footer {
+    padding: 16px 24px;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .changelog-title-section {
+    gap: 12px;
+  }
+  
+  .star-button {
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+  
+  .changelog-content {
+    padding: 20px;
+  }
+  
+  .changelog-item {
+    margin-bottom: 24px;
+  }
+  
+  .changelog-item-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}
