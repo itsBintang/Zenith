@@ -3,7 +3,7 @@
 
 use anyhow::Result;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::fs;
 use serde::{Deserialize, Serialize};
 use crate::database::{DatabaseManager, operations::*};

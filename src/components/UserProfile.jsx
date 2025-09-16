@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FiUser, FiUpload, FiEdit, FiAward, FiBarChart2, FiGitMerge } from 'react-icons/fi';
 import { invoke } from '@tauri-apps/api/core';
 import LibraryGrid from './LibraryGrid';
+import EditProfileModal from './EditProfileModal';
 import logoImage from "../../logo.jpg";
 import '../styles/UserProfile.css';
 
@@ -9,12 +10,13 @@ import '../styles/UserProfile.css';
 const bannerImage = "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80";
 
 
-function UserProfile({ onGameSelect, onBack, libraryState, onRefreshLibrary, onUpdateFilter }) {
+function UserProfile({ onGameSelect, onBack, libraryState, onRefreshLibrary, onUpdateFilter, onProfileUpdate }) {
   const [profile, setProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [bannerImage64, setBannerImage64] = useState(null);
   const [avatarImage64, setAvatarImage64] = useState(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   
   const totalPlaytimeMinutes = libraryState.games.reduce((acc, game) => acc + (game.playtime_forever || 0), 0);
   const totalPlaytimeHours = (totalPlaytimeMinutes / 60).toFixed(1);
@@ -74,10 +76,66 @@ function UserProfile({ onGameSelect, onBack, libraryState, onRefreshLibrary, onU
           // Reload profile to get updated data
           await loadProfile();
           
+          // Refresh sidebar profile
+          if (onProfileUpdate) {
+            onProfileUpdate();
+          }
+          
           console.log('Banner uploaded successfully:', imagePath);
         } catch (error) {
           console.error('Failed to upload banner:', error);
           alert('Failed to upload banner. Please try again.');
+        } finally {
+          setIsUploading(false);
+        }
+      };
+      
+      input.click();
+    } catch (error) {
+      console.error('Error opening file dialog:', error);
+      setIsUploading(false);
+    }
+  };
+
+  const handleAvatarUpload = async () => {
+    setIsUploading(true);
+    
+    try {
+      // Create file input element
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      
+      input.onchange = async (event) => {
+        const file = event.target.files[0];
+        if (!file) {
+          setIsUploading(false);
+          return;
+        }
+        
+        try {
+          // Convert file to array buffer
+          const arrayBuffer = await file.arrayBuffer();
+          const uint8Array = new Uint8Array(arrayBuffer);
+          
+          // Upload to backend
+          const imagePath = await invoke('upload_profile_image', {
+            imageData: Array.from(uint8Array),
+            imageType: 'avatar'
+          });
+          
+          // Reload profile to get updated data
+          await loadProfile();
+          
+          // Refresh sidebar profile
+          if (onProfileUpdate) {
+            onProfileUpdate();
+          }
+          
+          console.log('Avatar uploaded successfully:', imagePath);
+        } catch (error) {
+          console.error('Failed to upload avatar:', error);
+          alert('Failed to upload avatar. Please try again.');
         } finally {
           setIsUploading(false);
         }
@@ -108,34 +166,38 @@ function UserProfile({ onGameSelect, onBack, libraryState, onRefreshLibrary, onU
           <img 
             src={bannerImage64 || bannerImage} 
             alt="User Banner" 
+            onClick={handleBannerUpload}
+            style={{ cursor: 'pointer' }}
+            title="Click to upload banner"
           />
-          <div className="profile-banner-actions">
-            <button 
-              className="profile-action-btn" 
-              onClick={handleBannerUpload}
-              disabled={isUploading}
-            >
-              <FiUpload size={16} />
-              <span>{isUploading ? 'Uploading...' : 'Upload Banner'}</span>
-            </button>
-          </div>
         </div>
         <div className="profile-details-bar">
           <div className="profile-avatar-section">
-            <img 
-              src={avatarImage64 || logoImage} 
-              alt={profile?.name || 'User'} 
-              className="profile-avatar" 
-            />
+            <div className="profile-avatar-container">
+              <img 
+                src={avatarImage64 || logoImage} 
+                alt={profile?.name || 'User'} 
+                className="profile-avatar" 
+                onClick={() => handleAvatarUpload()}
+                style={{ cursor: 'pointer' }}
+                title="Click to upload avatar"
+              />
+            </div>
             <div className="profile-user-info">
               <div className="profile-user-name-badge">
-                <h1 className="profile-user-name">{profile?.name || 'Nazril'}</h1>
-                <span className="profile-user-badge">PREMIUM</span>
+                <h1 className="profile-user-name">{profile?.name || 'User'}</h1>
+                <span className="profile-user-badge">ADMIN</span>
               </div>
+              {profile?.bio && (
+                <p className="profile-user-bio">{profile.bio}</p>
+              )}
             </div>
           </div>
           <div className="profile-main-actions">
-             <button className="profile-action-btn edit-profile">
+             <button 
+               className="profile-action-btn edit-profile"
+               onClick={() => setIsEditModalOpen(true)}
+             >
                 <FiEdit size={16} />
                 <span>Edit Profile</span>
               </button>
@@ -160,6 +222,19 @@ function UserProfile({ onGameSelect, onBack, libraryState, onRefreshLibrary, onU
           />
         </div>
       </main>
+      
+      {/* Edit Profile Modal */}
+      <EditProfileModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        profile={profile}
+        onProfileUpdate={async () => {
+          await loadProfile();
+          if (onProfileUpdate) {
+            onProfileUpdate();
+          }
+        }}
+      />
     </div>
   );
 }

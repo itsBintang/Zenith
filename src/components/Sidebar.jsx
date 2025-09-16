@@ -1,12 +1,47 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { FiHome, FiBox, FiSettings, FiRefreshCw } from "react-icons/fi";
 import { invoke } from "@tauri-apps/api/core";
 import logoImage from "../../logo.jpg";
 import MyLibrary from './MyLibrary'; // Assuming MyLibrary is in the same folder
 
-function Sidebar({ active = "home", onNavigate, onGameSelect, onProfileClick, libraryState, onRefreshLibrary, onUpdateFilter }) {
+function Sidebar({ active = "home", onNavigate, onGameSelect, onProfileClick, libraryState, onRefreshLibrary, onUpdateFilter, refreshProfileTrigger }) {
   const [isRestarting, setIsRestarting] = useState(false);
   const [notification, setNotification] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [avatarImage, setAvatarImage] = useState(null);
+
+  // Load profile data on component mount
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  // Reload profile when refreshProfileTrigger changes
+  useEffect(() => {
+    if (refreshProfileTrigger) {
+      loadProfile();
+    }
+  }, [refreshProfileTrigger]);
+
+  const loadProfile = async () => {
+    try {
+      // Load profile data
+      const profileData = await invoke('get_user_profile');
+      setProfile(profileData);
+      
+      // Load avatar image as base64
+      try {
+        const avatarBase64 = await invoke('get_profile_image_base64', { imageType: 'avatar' });
+        setAvatarImage(avatarBase64);
+      } catch (imageError) {
+        console.error('Failed to load avatar image:', imageError);
+        setAvatarImage(null);
+      }
+    } catch (error) {
+      console.error('Failed to load profile:', error);
+      // Set default profile if loading fails
+      setProfile({ name: 'User' });
+    }
+  };
 
   const handleRestartSteam = async () => {
     if (isRestarting) return;
@@ -49,8 +84,12 @@ function Sidebar({ active = "home", onNavigate, onGameSelect, onProfileClick, li
       {/* Profile Section */}
       <div className="ui-sidebar__section">
         <div className="ui-profile" onClick={() => onProfileClick && onProfileClick()}>
-          <img src={logoImage} alt="Nazril" className="ui-profile__avatar" />
-          <span className="ui-profile__name">Nazril</span>
+          <img 
+            src={avatarImage || logoImage} 
+            alt={profile?.name || 'User'} 
+            className="ui-profile__avatar" 
+          />
+          <span className="ui-profile__name">{profile?.name || 'User'}</span>
         </div>
       </div>
 

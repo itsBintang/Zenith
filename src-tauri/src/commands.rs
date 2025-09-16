@@ -284,7 +284,7 @@ pub async fn get_user_profile() -> Result<crate::database::models::UserProfile, 
             None => {
                 // Create default profile if none exists
                 let default_profile = crate::database::models::UserProfile::new(
-                    "Nazril".to_string(), 
+                    "User".to_string(), 
                     Some("Steam User".to_string())
                 );
                 UserProfileOperations::upsert(conn, &default_profile)?;
@@ -387,14 +387,33 @@ pub async fn get_profile_image_base64(image_type: String) -> Result<Option<Strin
 }
 
 #[command]
-pub async fn update_profile_field(field: String, value: String) -> Result<(), String> {
+pub async fn reset_profile_to_default() -> Result<(), String> {
     use crate::database::{DatabaseManager, operations::UserProfileOperations};
     
     let db_path = get_profile_db_path().map_err(|e| e.to_string())?;
     let db_manager = DatabaseManager::new(db_path).map_err(|e| e.to_string())?;
     
     db_manager.with_connection(|conn| {
-        UserProfileOperations::update_field(conn, &field, Some(&value))
+        // Reset to default profile
+        let default_profile = crate::database::models::UserProfile::new(
+            "User".to_string(), 
+            Some("Steam User".to_string())
+        );
+        UserProfileOperations::upsert(conn, &default_profile)
+    }).map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
+#[command]
+pub async fn update_profile_field(field: String, value: Option<String>) -> Result<(), String> {
+    use crate::database::{DatabaseManager, operations::UserProfileOperations};
+    
+    let db_path = get_profile_db_path().map_err(|e| e.to_string())?;
+    let db_manager = DatabaseManager::new(db_path).map_err(|e| e.to_string())?;
+    
+    db_manager.with_connection(|conn| {
+        UserProfileOperations::update_field(conn, &field, value.as_deref())
     }).map_err(|e| e.to_string())?;
     
     Ok(())
@@ -421,24 +440,14 @@ fn get_profile_dir() -> Result<PathBuf, anyhow::Error> {
 }
 
 fn get_profile_db_path() -> Result<PathBuf, anyhow::Error> {
-    // Use the same database as the main application
-    let app_dir = if cfg!(target_os = "windows") {
-        std::env::var("APPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from(r"C:\Users\Default\AppData\Roaming"))
-    } else if cfg!(target_os = "macos") {
-        dirs::home_dir()
-            .map(|home| home.join("Library").join("Application Support"))
-            .unwrap_or_else(|| PathBuf::from("/tmp"))
-    } else {
-        dirs::home_dir()
-            .map(|home| home.join(".local").join("share"))
-            .unwrap_or_else(|| PathBuf::from("/tmp"))
-    };
+    // Use the same database path as the main cache database
+    let cache_dir = dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("zenith-launcher")
+        .join("cache");
     
-    let db_dir = app_dir.join("zenith");
-    fs::create_dir_all(&db_dir)?;
-    Ok(db_dir.join("cache.db"))
+    fs::create_dir_all(&cache_dir)?;
+    Ok(cache_dir.join("games.db"))
 }
 
 // Steam Path Management Commands

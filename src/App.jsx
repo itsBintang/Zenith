@@ -31,6 +31,9 @@ function App() {
     filter: ''
   });
 
+  // Profile refresh state
+  const [profileRefreshTrigger, setProfileRefreshTrigger] = React.useState(0);
+
   // App initialization
   React.useEffect(() => {
     let isMounted = true;
@@ -161,6 +164,11 @@ function App() {
     setLibraryState(prev => ({ ...prev, filter }));
   };
 
+  // Profile refresh function
+  const refreshProfile = () => {
+    setProfileRefreshTrigger(prev => prev + 1);
+  };
+
   // Load library on app initialization
   React.useEffect(() => {
     if (!isLoading && !initError) {
@@ -209,6 +217,7 @@ function App() {
         libraryState={libraryState}
         onRefreshLibrary={refreshLibrary}
         onUpdateFilter={updateLibraryFilter}
+        onProfileUpdate={refreshProfile}
       />;
       break;
     default:
@@ -225,6 +234,7 @@ function App() {
         libraryState={libraryState}
         onRefreshLibrary={refreshLibrary}
         onUpdateFilter={updateLibraryFilter}
+        refreshProfileTrigger={profileRefreshTrigger}
       />
       <main className="ui-main">
         {content}

@@ -51,7 +51,7 @@
                },
     "productName":  "Zenith Launcher",
     "mainBinaryName":  "Zenith Launcher",
-    "version":  "1.3.0",
+    "version":  "1.5.0",
     "identifier":  "com.zenith.launcher",
     "plugins":  {
                     "updater":  {

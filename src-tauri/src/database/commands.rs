@@ -3,8 +3,7 @@
 
 use tauri::command;
 use crate::database::{
-    migration_utils::{auto_migrate_if_needed, CacheMigrator, MigrationStatus},
-    cache_service::SqliteCacheService,
+    migration_utils::{auto_migrate_if_needed, CacheMigrator},
     DatabaseManager,
 };
 use anyhow::Result;
@@ -163,7 +162,7 @@ pub async fn vacuum_database() -> Result<String, String> {
 
 #[command]
 pub async fn test_sqlite_connection() -> Result<String, String> {
-    let service = SqliteCacheService::new().map_err(|e| e.to_string())?;
+    let service = crate::database::cache_service::SqliteCacheService::new().map_err(|e| e.to_string())?;
     
     // Try to perform a simple operation
     match service.clear_cache() {

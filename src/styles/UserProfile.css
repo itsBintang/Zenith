@@ -29,12 +29,9 @@
   opacity: 0.6;
 }
 
-.profile-banner-actions {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  display: flex;
-  gap: 0.5rem;
+.profile-banner img:hover {
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
 }
 
 .profile-action-btn {
@@ -71,12 +68,23 @@
   gap: 1.5rem;
 }
 
+.profile-avatar-container {
+  position: relative;
+  display: inline-block;
+}
+
 .profile-avatar {
   width: 120px;
   height: 120px;
   border-radius: 50%;
   border: 4px solid #111319;
   background: #2a2d36;
+  object-fit: cover;
+}
+
+.profile-avatar:hover {
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
 }
 
 .profile-user-info {
@@ -106,6 +114,14 @@
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
+}
+
+.profile-user-bio {
+  margin: 0.5rem 0 0 0;
+  color: #9ca3af;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  max-width: 400px;
 }
 .profile-user-handle {
   display: flex;

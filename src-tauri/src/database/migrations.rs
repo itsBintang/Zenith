@@ -189,7 +189,7 @@ fn migrate_to_v3(conn: &Connection) -> Result<()> {
         
         // Insert default user profile
         conn.execute(
-            "INSERT INTO user_profile (id, name, bio) VALUES (1, 'Nazril', 'Steam User')",
+            "INSERT INTO user_profile (id, name, bio) VALUES (1, 'User', 'Steam User')",
             [],
         )?;
     }

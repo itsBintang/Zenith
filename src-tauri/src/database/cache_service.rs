@@ -5,7 +5,6 @@ use tokio::sync::{Mutex, Semaphore};
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::sleep;
-use chrono::Utc;
 use crate::database::{DatabaseManager, operations::*};
 use crate::database::models::{Game, GameDetailDb};
 use crate::GameDetail;
@@ -614,9 +613,8 @@ pub struct GranularCleanupResult {
     pub total_cleaned: usize,
 }
 
-/// Global static instance (to replace GAME_CACHE)
 lazy_static::lazy_static! {
-    pub static ref SQLITE_GAME_CACHE: SqliteCacheService = {
-        SqliteCacheService::new().expect("Failed to initialize SQLite cache service")
+    pub static ref SQLITE_CACHE_SERVICE: Arc<SqliteCacheService> = {
+        Arc::new(SqliteCacheService::new().expect("Failed to initialize SQLite cache service"))
     };
 }

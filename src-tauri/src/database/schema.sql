@@ -60,7 +60,7 @@ CREATE TABLE cache_metadata (
 -- User profile data
 CREATE TABLE user_profile (
     id INTEGER PRIMARY KEY DEFAULT 1, -- Single profile entry
-    name TEXT NOT NULL DEFAULT 'Nazril',
+    name TEXT NOT NULL DEFAULT 'User',
     bio TEXT DEFAULT 'Steam User',
     steam_id TEXT,
     banner_path TEXT, -- Local file path to banner image
@@ -96,4 +96,4 @@ INSERT INTO cache_metadata (key, value) VALUES
     ('last_cleanup', '0');
 
 -- Insert default user profile
-INSERT INTO user_profile (id, name, bio) VALUES (1, 'Nazril', 'Steam User');
+INSERT INTO user_profile (id, name, bio) VALUES (1, 'User', 'Steam User');
