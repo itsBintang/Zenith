@@ -8,6 +8,7 @@ import GameDetail from "./components/GameDetail";
 import LoadingScreen from "./components/LoadingScreen";
 import Settings from "./components/Settings";
 import UserProfile from "./components/UserProfile";
+import Bypass from "./components/Bypass";
 import "./App.css";
 
 function App() {
@@ -203,6 +204,9 @@ function App() {
         catalogueState={catalogueState}
         setCatalogueState={setCatalogueState}
       />;
+      break;
+    case 'bypass':
+      content = <Bypass />;
       break;
     case 'detail':
       content = <GameDetail 

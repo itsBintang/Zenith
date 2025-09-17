@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { FiHome, FiBox, FiSettings, FiRefreshCw } from "react-icons/fi";
+import { FiHome, FiBox, FiSettings, FiRefreshCw, FiShield } from "react-icons/fi";
 import { invoke } from "@tauri-apps/api/core";
 import logoImage from "../../logo.jpg";
 import MyLibrary from './MyLibrary'; // Assuming MyLibrary is in the same folder
@@ -102,6 +102,10 @@ function Sidebar({ active = "home", onNavigate, onGameSelect, onProfileClick, li
         <a className={`ui-nav-item ${active === "catalogue" ? "ui-nav-item--active" : ""}`} onClick={() => onNavigate && onNavigate("catalogue")}>
           <FiBox size={18} />
           <span>Catalogue</span>
+        </a>
+        <a className={`ui-nav-item ${active === "bypass" ? "ui-nav-item--active" : ""}`} onClick={() => onNavigate && onNavigate("bypass")}>
+          <FiShield size={18} />
+          <span>Bypass</span>
         </a>
         <a className={`ui-nav-item ${active === "settings" ? "ui-nav-item--active" : ""}`} onClick={() => onNavigate && onNavigate("settings")}>
           <FiSettings size={18} />

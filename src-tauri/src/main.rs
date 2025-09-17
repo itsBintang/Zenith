@@ -2330,6 +2330,7 @@ fn main() {
             // Bypass Commands
             bypass::install_bypass,
             bypass::install_bypass_with_type,
+            bypass::install_bypass_direct,
             bypass::check_bypass_installed_command,
             bypass::check_bypass_availability,
             bypass::get_available_bypass_types,
