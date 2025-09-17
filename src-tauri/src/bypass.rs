@@ -78,7 +78,7 @@ lazy_static! {
     // Multiple bypass download sources with fallback mechanism
     pub static ref BYPASS_SOURCES: Vec<&'static str> = vec![
         "https://bypass.nzr.web.id",
-        "https://bypass1.nzr.web.id",
+        "http://cdn2.nzr.web.id/",
     ];
 }
 
@@ -276,10 +276,18 @@ pub async fn check_bypass_availability(app_id: String) -> Result<BypassStatus, S
 async fn detect_available_bypass_types(app_id: &str) -> Vec<BypassInfo> {
     let mut available_bypasses = Vec::new();
     
+    println!("🔍 Checking bypass availability across {} sources", BYPASS_SOURCES.len());
+    for source in BYPASS_SOURCES.iter() {
+        println!("   - Source: {}", source);
+    }
+    
     // Check for numbered bypass files (1-10 for now, can be extended)
     for bypass_number in 1..=10 {
+        let mut found_for_this_number = false;
+        
         for source in BYPASS_SOURCES.iter() {
             let bypass_url = format!("{}/{}_{}.zip", source, app_id, bypass_number);
+            println!("🔍 Checking: {}", bypass_url);
             
             match DOWNLOAD_CLIENT.head(&bypass_url).send().await {
                 Ok(response) => {
@@ -306,20 +314,32 @@ async fn detect_available_bypass_types(app_id: &str) -> Vec<BypassInfo> {
                         };
                         
                         available_bypasses.push(bypass_info);
+                        found_for_this_number = true;
                         break; // Found this type, move to next number
+                    } else {
+                        println!("❌ HTTP {} for: {}", response.status(), bypass_url);
                     }
                 }
-                Err(_) => {
+                Err(e) => {
+                    println!("❌ Network error for {}: {}", bypass_url, e);
                     // Continue to next source
                     continue;
                 }
             }
         }
+        
+        // If we didn't find this number in any source, we can break early
+        // (assuming bypass files are numbered consecutively)
+        if !found_for_this_number {
+            println!("🔍 No bypass type {} found in any source, checking next numbers...", bypass_number);
+        }
     }
     
     // Also check for legacy bypass (no number suffix)
+    println!("🔍 Checking for legacy bypass files (no number suffix)");
     for source in BYPASS_SOURCES.iter() {
         let bypass_url = format!("{}/{}.zip", source, app_id);
+        println!("🔍 Checking legacy: {}", bypass_url);
         
         match DOWNLOAD_CLIENT.head(&bypass_url).send().await {
             Ok(response) => {
@@ -335,9 +355,14 @@ async fn detect_available_bypass_types(app_id: &str) -> Vec<BypassInfo> {
                     
                     available_bypasses.push(bypass_info);
                     break;
+                } else {
+                    println!("❌ HTTP {} for legacy: {}", response.status(), bypass_url);
                 }
             }
-            Err(_) => continue,
+            Err(e) => {
+                println!("❌ Network error for legacy {}: {}", bypass_url, e);
+                continue;
+            }
         }
     }
     
@@ -1271,3 +1296,5 @@ fn cleanup_temp_files(download_path: &str, extract_path: &str) -> Result<(), Str
     }
     Ok(())
 }
+
+

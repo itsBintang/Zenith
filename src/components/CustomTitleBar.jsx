@@ -179,13 +179,16 @@ const CustomTitleBar = ({ theme = 'app-theme' }) => {
   return (
     <div className={`custom-titlebar ${theme}`}>
       <div className="titlebar-content" data-tauri-drag-region>
-        <div className="titlebar-icon">
-          <img src="/logo.jpg" alt="Zenith" className="app-icon" />
+        <div className="titlebar-left">
+          <div className="titlebar-icon">
+            <img src="/logo.jpg" alt="Zenith" className="app-icon" />
+          </div>
+          <div className="titlebar-title">
+            Zenith
+          </div>
         </div>
         
-        <div className="titlebar-title">
-          Zenith Launcher
-        </div>
+        <div className="titlebar-spacer"></div>
         
         <div className="titlebar-controls">
           <div className="titlebar-menu">
