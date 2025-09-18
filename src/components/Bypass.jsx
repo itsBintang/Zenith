@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { FiShield, FiPlay, FiCheck, FiX, FiSearch } from "react-icons/fi";
+import { FiShield, FiPlay, FiCheck, FiX, FiSearch, FiRefreshCw } from "react-icons/fi";
 import { isTauri } from '@tauri-apps/api/core';
 import "../styles/Bypass.css";
 
@@ -72,6 +72,7 @@ function Bypass() {
   const [gameExecutables, setGameExecutables] = useState([]);
   const [loadingExecutables, setLoadingExecutables] = useState(false);
   const [bypassNotes, setBypassNotes] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Load bypass games from JSON on component mount
   useEffect(() => {
@@ -157,6 +158,57 @@ function Bypass() {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const refreshBypassGames = async () => {
+    try {
+      setIsRefreshing(true);
+      
+      // Force refresh from GitHub by clearing cache and fetching fresh data
+      await invoke("refresh_bypass_games_cache");
+      console.log('Bypass games cache refreshed from GitHub');
+      
+      // Reload bypass games
+      const gamesData = await invoke("get_bypass_games_cached");
+      console.log('Refreshed bypass games from GitHub:', gamesData);
+      
+      setBypassGames(gamesData);
+      
+      // Check bypass status for all games
+      const statusPromises = gamesData.map(async (game) => {
+        try {
+          const isInstalled = await invoke("check_bypass_installed_command", { appId: game.appId });
+          return { appId: game.appId, installed: isInstalled };
+        } catch (error) {
+          console.error(`Error checking bypass for ${game.name}:`, error);
+          return { appId: game.appId, installed: false };
+        }
+      });
+
+      const statusResults = await Promise.all(statusPromises);
+      const statusMap = {};
+      statusResults.forEach(result => {
+        statusMap[result.appId] = {
+          installed: result.installed,
+          installing: false
+        };
+      });
+      
+      setBypassStatus(statusMap);
+      
+      setNotification({
+        message: `Success refreshed ${gamesData.length} bypass games`,
+        type: 'success'
+      });
+    } catch (error) {
+      console.error('Error refreshing bypass games:', error);
+      setNotification({
+        message: `Failed to refresh bypass games: ${error}`,
+        type: 'error'
+      });
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -358,6 +410,14 @@ function Bypass() {
               className="bypass-search__input"
             />
           </div>
+          <button 
+            className={`bypass-refresh-btn ${isRefreshing ? 'loading' : ''}`}
+            onClick={refreshBypassGames}
+            disabled={isRefreshing || isLoading}
+            title="Refresh bypass games from GitHub"
+          >
+            <FiRefreshCw size={16} />
+          </button>
         </div>
       </div>
 

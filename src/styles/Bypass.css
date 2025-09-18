@@ -71,11 +71,33 @@
   color: #8b949e;
 }
 
+/* Refresh Button - Same as MyLibrary */
+.bypass-refresh-btn {
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s, transform 0.2s;
+}
+
+.bypass-refresh-btn:hover {
+  color: #fff;
+}
+
+.bypass-refresh-btn.loading svg {
+  animation: spin 1s linear infinite;
+}
 
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
 
 /* Content */
 .bypass-content {
@@ -635,6 +657,11 @@
   .bypass-header__right {
     justify-content: center;
     width: 100%;
+    gap: 0.75rem;
+  }
+
+  .bypass-refresh-btn {
+    padding: 0.4rem;
   }
 
   .bypass-search {

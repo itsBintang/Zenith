@@ -615,17 +615,25 @@ impl SqliteCacheService {
         self.load_bypass_games_from_json().await
     }
 
-    /// Load bypass games from embedded JSON data and cache them
+    /// Load bypass games from GitHub API and cache them
     async fn load_bypass_games_from_json(&self) -> Result<Vec<BypassGame>> {
-        // Static bypass games data (matches src/data/bypassGames.json)
-        let json_data = r#"[
+        // Try to fetch from GitHub API first
+        let json_data = match self.fetch_bypass_games_from_github().await {
+            Ok(data) => {
+                println!("Successfully fetched bypass games from GitHub API");
+                data
+            }
+            Err(e) => {
+                eprintln!("Failed to fetch from GitHub API: {}, falling back to embedded data", e);
+                // Fallback to embedded data if GitHub API fails
+                r#"[
   {
     "appId": "1174180",
     "name": "Red Dead Redemption 2",
     "image": "https://itsbintang.github.io/cdn/1174180.jpg",
     "bypasses": [
       {
-        "type": 1,
+        "type": "1",
         "url": "https://bypass.nzr.web.id/1174180_1.zip"
       }
     ]
@@ -636,7 +644,7 @@ impl SqliteCacheService {
     "image": "https://itsbintang.github.io/cdn/1546990.jpg",
     "bypasses": [
       {
-        "type": 3,
+        "type": "3",
         "url": "http://cdn2.nzr.web.id/1546990_3.zip"
       }
     ]
@@ -647,12 +655,14 @@ impl SqliteCacheService {
     "image": "https://itsbintang.github.io/cdn/582160.jpg",
     "bypasses": [
       {
-        "type": 1,
+        "type": "1",
         "url": "https://bypass.nzr.web.id/582160_1.zip"
       }
     ]
   }
-]"#;
+]"#.to_string()
+            }
+        };
 
         // Parse JSON data
         #[derive(serde::Deserialize)]
@@ -666,11 +676,12 @@ impl SqliteCacheService {
 
         #[derive(serde::Deserialize)]
         struct JsonBypassInfo {
+            #[serde(deserialize_with = "deserialize_type_field")]
             r#type: u8,
             url: String,
         }
 
-        let json_games: Vec<JsonBypassGame> = serde_json::from_str(json_data)?;
+        let json_games: Vec<JsonBypassGame> = serde_json::from_str(&json_data)?;
         
         // Convert to BypassGame models
         let mut bypass_games = Vec::new();
@@ -729,6 +740,81 @@ impl SqliteCacheService {
         let all_games = self.get_bypass_games().await?;
         Ok(all_games.into_iter().find(|g| g.app_id == app_id))
     }
+
+    /// Fetch bypass games data from GitHub API
+    async fn fetch_bypass_games_from_github(&self) -> Result<String> {
+        use reqwest;
+        
+        // GitHub API URL for the bypass games JSON file
+        let github_api_url = "https://api.github.com/repos/itsbintang/bypass-games-api/contents/bypassGames.json";
+        
+        let client = reqwest::Client::new();
+        let response = client
+            .get(github_api_url)
+            .header("User-Agent", "Zenith-Launcher")
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow::anyhow!("GitHub API returned error: {}", response.status()));
+        }
+
+        let github_response: serde_json::Value = response.json().await?;
+        
+        // Extract base64 content from GitHub API response
+        let content = github_response["content"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("No content field in GitHub response"))?;
+
+        // Decode base64 content
+        use base64::{Engine as _, engine::general_purpose};
+        let decoded_bytes = general_purpose::STANDARD.decode(content.replace('\n', ""))
+            .map_err(|e| anyhow::anyhow!("Failed to decode base64: {}", e))?;
+
+        let json_content = String::from_utf8(decoded_bytes)
+            .map_err(|e| anyhow::anyhow!("Failed to convert to UTF-8: {}", e))?;
+
+        Ok(json_content)
+    }
+}
+
+/// Custom deserializer for type field that can handle both string and integer
+fn deserialize_type_field<'de, D>(deserializer: D) -> std::result::Result<u8, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+    use std::fmt;
+
+    struct TypeVisitor;
+
+    impl<'de> Visitor<'de> for TypeVisitor {
+        type Value = u8;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a string or integer representing a type")
+        }
+
+        fn visit_str<E>(self, value: &str) -> std::result::Result<u8, E>
+        where
+            E: de::Error,
+        {
+            value.parse::<u8>().map_err(de::Error::custom)
+        }
+
+        fn visit_u64<E>(self, value: u64) -> std::result::Result<u8, E>
+        where
+            E: de::Error,
+        {
+            if value <= 255 {
+                Ok(value as u8)
+            } else {
+                Err(de::Error::custom("type value too large"))
+            }
+        }
+    }
+
+    deserializer.deserialize_any(TypeVisitor)
 }
 
 /// Result of batch refresh operation
