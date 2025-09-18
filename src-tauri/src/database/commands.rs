@@ -250,3 +250,157 @@ pub struct CacheConfigInfo {
     pub circuit_breaker_threshold: u32,
     pub max_retries: u32,
 }
+
+// ============= BYPASS GAMES COMMANDS =============
+
+/// Frontend structure for bypass games (matches src/data/bypassGames.json)
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub struct FrontendBypassGame {
+    #[serde(rename = "appId")]
+    pub app_id: String,
+    pub name: String,
+    pub image: String,
+    pub bypasses: Vec<FrontendBypassInfo>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub struct FrontendBypassInfo {
+    pub r#type: u8,
+    pub url: String,
+}
+
+/// Get all bypass games with SQLite caching (1 month TTL)
+#[command]
+pub async fn get_bypass_games_cached() -> Result<Vec<FrontendBypassGame>, String> {
+    match crate::database::cache_service::SQLITE_CACHE_SERVICE.get_bypass_games().await {
+        Ok(bypass_games) => {
+            // Convert from database models to frontend format
+            let frontend_games = bypass_games
+                .into_iter()
+                .map(|game| FrontendBypassGame {
+                    app_id: game.app_id,
+                    name: game.name,
+                    image: game.image,
+                    bypasses: game.bypasses
+                        .into_iter()
+                        .map(|bypass| FrontendBypassInfo {
+                            r#type: bypass.r#type,
+                            url: bypass.url,
+                        })
+                        .collect(),
+                })
+                .collect();
+            
+            Ok(frontend_games)
+        }
+        Err(e) => {
+            eprintln!("Error getting bypass games from cache: {}", e);
+            Err(format!("Failed to get bypass games: {}", e))
+        }
+    }
+}
+
+/// Force refresh bypass games cache
+#[command]
+pub async fn refresh_bypass_games_cache() -> Result<String, String> {
+    match crate::database::cache_service::SQLITE_CACHE_SERVICE.refresh_bypass_games().await {
+        Ok(games) => Ok(format!("Successfully refreshed {} bypass games", games.len())),
+        Err(e) => {
+            eprintln!("Error refreshing bypass games cache: {}", e);
+            Err(format!("Failed to refresh bypass games cache: {}", e))
+        }
+    }
+}
+
+/// Clear bypass games cache specifically
+#[command]
+pub async fn clear_bypass_games_cache() -> Result<String, String> {
+    let cache_dir = dirs::data_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("zenith-launcher")
+        .join("cache");
+    
+    let db_path = cache_dir.join("games.db");
+    let db = DatabaseManager::new(db_path).map_err(|e| e.to_string())?;
+    
+    db.with_connection(|conn| {
+        crate::database::operations::BypassGameOperations::clear_all(conn)
+    }).map_err(|e: anyhow::Error| e.to_string())?;
+    
+    Ok("Bypass games cache cleared successfully".to_string())
+}
+
+/// Get specific bypass game by app_id
+#[command]
+pub async fn get_bypass_game_by_id(app_id: String) -> Result<Option<FrontendBypassGame>, String> {
+    match crate::database::cache_service::SQLITE_CACHE_SERVICE.get_bypass_game(&app_id).await {
+        Ok(Some(game)) => {
+            let frontend_game = FrontendBypassGame {
+                app_id: game.app_id,
+                name: game.name,
+                image: game.image,
+                bypasses: game.bypasses
+                    .into_iter()
+                    .map(|bypass| FrontendBypassInfo {
+                        r#type: bypass.r#type,
+                        url: bypass.url,
+                    })
+                    .collect(),
+            };
+            Ok(Some(frontend_game))
+        }
+        Ok(None) => Ok(None),
+        Err(e) => {
+            eprintln!("Error getting bypass game {}: {}", app_id, e);
+            Err(format!("Failed to get bypass game: {}", e))
+        }
+    }
+}
+
+/// Get bypass games cache statistics
+#[command]
+pub async fn get_bypass_games_cache_stats() -> Result<BypassGamesCacheStats, String> {
+    use crate::database::DatabaseManager;
+    use std::path::PathBuf;
+    
+    let cache_dir = dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("zenith-launcher")
+        .join("cache");
+    let db_path = cache_dir.join("games.db");
+    
+    match DatabaseManager::new(db_path) {
+        Ok(db) => {
+            match db.with_connection(|conn| {
+                use crate::database::operations::BypassGameOperations;
+                
+                let total_games = BypassGameOperations::count(conn)?;
+                let expired_games = BypassGameOperations::get_expired(conn)?.len() as u32;
+                let valid_games = total_games - expired_games;
+                
+                Ok(BypassGamesCacheStats {
+                    total_games,
+                    valid_games,
+                    expired_games,
+                    cache_hit_rate: if total_games > 0 {
+                        (valid_games as f64 / total_games as f64) * 100.0
+                    } else {
+                        0.0
+                    },
+                })
+            }) {
+                Ok(stats) => Ok(stats),
+                Err(e) => Err(format!("Database error: {}", e)),
+            }
+        }
+        Err(e) => Err(format!("Failed to connect to database: {}", e)),
+    }
+}
+
+#[derive(serde::Serialize, Debug)]
+pub struct BypassGamesCacheStats {
+    pub total_games: u32,
+    pub valid_games: u32,
+    pub expired_games: u32,
+    pub cache_hit_rate: f64,
+}

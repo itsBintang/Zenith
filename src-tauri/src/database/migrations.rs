@@ -2,7 +2,7 @@ use anyhow::Result;
 use rusqlite::Connection;
 
 /// Current database schema version
-const CURRENT_SCHEMA_VERSION: i32 = 3;
+const CURRENT_SCHEMA_VERSION: i32 = 4;
 
 /// Run all necessary database migrations
 pub fn run_migrations(conn: &Connection) -> Result<()> {
@@ -67,6 +67,7 @@ fn migrate_to_version(conn: &Connection, version: i32) -> Result<()> {
         1 => migrate_to_v1(conn),
         2 => migrate_to_v2(conn),
         3 => migrate_to_v3(conn),
+        4 => migrate_to_v4(conn),
         _ => Err(anyhow::anyhow!("Unknown migration version: {}", version)),
     }
 }
@@ -195,6 +196,57 @@ fn migrate_to_v3(conn: &Connection) -> Result<()> {
     }
     
     println!("User profile table migration completed successfully");
+    Ok(())
+}
+
+/// Migration to version 4: Add bypass_games table
+fn migrate_to_v4(conn: &Connection) -> Result<()> {
+    println!("Adding bypass_games table (v4)...");
+    
+    // Check if bypass_games table already exists
+    let table_exists: bool = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='bypass_games'",
+        [],
+        |row| Ok(row.get::<_, i32>(0)? > 0)
+    )?;
+    
+    if !table_exists {
+        // Create bypass_games table
+        conn.execute(
+            "CREATE TABLE bypass_games (
+                app_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                image TEXT NOT NULL,
+                bypasses TEXT NOT NULL,
+                cached_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL,
+                last_updated INTEGER DEFAULT (strftime('%s', 'now'))
+            )",
+            [],
+        )?;
+        
+        // Create indexes for bypass_games
+        let _ = conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bypass_games_name ON bypass_games(name)",
+            [],
+        );
+        
+        let _ = conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bypass_games_cached_at ON bypass_games(cached_at)",
+            [],
+        );
+        
+        let _ = conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bypass_games_expires_at ON bypass_games(expires_at)",
+            [],
+        );
+        
+        println!("bypass_games table created successfully");
+    } else {
+        println!("bypass_games table already exists, skipping creation");
+    }
+    
+    println!("Bypass games table migration completed successfully");
     Ok(())
 }
 

@@ -69,6 +69,17 @@ CREATE TABLE user_profile (
     updated_at INTEGER DEFAULT (strftime('%s', 'now'))
 );
 
+-- Bypass games data (static data with monthly TTL)
+CREATE TABLE bypass_games (
+    app_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    image TEXT NOT NULL,
+    bypasses TEXT NOT NULL, -- JSON array of bypass info (type, url)
+    cached_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL, -- 1 month TTL for static data
+    last_updated INTEGER DEFAULT (strftime('%s', 'now'))
+);
+
 -- Indexes for better query performance
 CREATE INDEX idx_games_name ON games(name);
 CREATE INDEX idx_games_cached_at ON games(cached_at);
@@ -88,6 +99,11 @@ CREATE INDEX idx_user_library_last_accessed ON user_library(last_accessed);
 
 CREATE INDEX idx_cache_metadata_key ON cache_metadata(key);
 CREATE INDEX idx_user_profile_updated_at ON user_profile(updated_at);
+
+-- Indexes for bypass games
+CREATE INDEX idx_bypass_games_name ON bypass_games(name);
+CREATE INDEX idx_bypass_games_cached_at ON bypass_games(cached_at);
+CREATE INDEX idx_bypass_games_expires_at ON bypass_games(expires_at);
 
 -- Insert initial metadata
 INSERT INTO cache_metadata (key, value) VALUES 

@@ -5,19 +5,19 @@
 pub struct TtlConfig;
 
 impl TtlConfig {
-    // ========== DYNAMIC DATA (TTL Pendek) ==========
-    /// DLC List - can be updated frequently with new releases
-    pub const DLC_LIST: i64 = 3 * 24 * 3600; // 3 days
+    // ========== DYNAMIC DATA (TTL Sedang) ==========
+    /// DLC List - can be updated with new releases but not that frequently
+    pub const DLC_LIST: i64 = 30 * 24 * 3600; // 30 days (increased from 3 days)
     
     // ========== STATIC DATA (TTL Panjang) ==========
     /// Screenshots - rarely change unless major update
-    pub const SCREENSHOTS: i64 = 30 * 24 * 3600; // 30 days
+    pub const SCREENSHOTS: i64 = 90 * 24 * 3600; // 90 days (increased from 30 days)
     
     /// Detailed descriptions - very stable content
-    pub const DETAILED_DESCRIPTION: i64 = 30 * 24 * 3600; // 30 days
+    pub const DETAILED_DESCRIPTION: i64 = 90 * 24 * 3600; // 90 days (increased from 30 days)
     
     /// System requirements - only change with major updates
-    pub const SYSTEM_REQUIREMENTS: i64 = 60 * 24 * 3600; // 60 days
+    pub const SYSTEM_REQUIREMENTS: i64 = 180 * 24 * 3600; // 180 days (increased from 60 days)
     
     /// Publisher - almost never changes
     pub const PUBLISHER: i64 = 365 * 24 * 3600; // 1 year (permanent-like)
@@ -25,25 +25,25 @@ impl TtlConfig {
     /// Release date - never changes after release
     pub const RELEASE_DATE: i64 = 365 * 24 * 3600; // 1 year (permanent-like)
     
-    // ========== SEMI-STATIC DATA (TTL Sedang) ==========
+    // ========== SEMI-STATIC DATA (TTL Sedang-Panjang) ==========
     /// Game name - can change but rarely
-    pub const GAME_NAME: i64 = 30 * 24 * 3600; // 30 days
+    pub const GAME_NAME: i64 = 60 * 24 * 3600; // 60 days (increased from 30 days)
     
     /// Header image - updated occasionally
-    pub const HEADER_IMAGE: i64 = 21 * 24 * 3600; // 3 weeks
+    pub const HEADER_IMAGE: i64 = 60 * 24 * 3600; // 60 days (increased from 21 days)
     
     /// Banner image - updated occasionally  
-    pub const BANNER_IMAGE: i64 = 21 * 24 * 3600; // 3 weeks
+    pub const BANNER_IMAGE: i64 = 60 * 24 * 3600; // 60 days (increased from 21 days)
     
     /// Trailer - can be updated with major releases
-    pub const TRAILER: i64 = 21 * 24 * 3600; // 3 weeks
+    pub const TRAILER: i64 = 60 * 24 * 3600; // 60 days (increased from 21 days)
     
     /// DRM notice - changes rarely but can happen
-    pub const DRM_NOTICE: i64 = 60 * 24 * 3600; // 60 days
+    pub const DRM_NOTICE: i64 = 90 * 24 * 3600; // 90 days (increased from 60 days)
     
     // ========== DEFAULT FALLBACK ==========
     /// Default TTL for unknown/mixed data
-    pub const DEFAULT: i64 = 7 * 24 * 3600; // 7 days
+    pub const DEFAULT: i64 = 30 * 24 * 3600; // 30 days (increased from 7 days)
 }
 
 /// TTL categories for easier management
@@ -61,9 +61,9 @@ impl TtlCategory {
     /// Get appropriate TTL for the category
     pub fn default_ttl(&self) -> i64 {
         match self {
-            TtlCategory::Dynamic => 3 * 24 * 3600,      // 3 days
-            TtlCategory::SemiStatic => 21 * 24 * 3600,   // 3 weeks  
-            TtlCategory::Static => 60 * 24 * 3600,       // 60 days
+            TtlCategory::Dynamic => 30 * 24 * 3600,      // 30 days (increased from 3 days)
+            TtlCategory::SemiStatic => 60 * 24 * 3600,   // 60 days (increased from 21 days)  
+            TtlCategory::Static => 90 * 24 * 3600,       // 90 days (increased from 60 days)
         }
     }
     
@@ -143,9 +143,9 @@ pub struct SmartTtl;
 
 impl SmartTtl {
     /// Calculate optimal TTL for full game detail refresh
-    /// Uses the shortest TTL among all fields to ensure freshness
+    /// Uses the dynamic data TTL as baseline for critical data
     pub fn calculate_full_refresh_ttl() -> i64 {
-        TtlConfig::DLC_LIST // Use dynamic data TTL as baseline (3 days)
+        TtlConfig::DLC_LIST // Use dynamic data TTL as baseline (30 days)
     }
     
     /// Calculate TTL for partial refresh of specific fields
@@ -201,7 +201,7 @@ mod tests {
     fn test_smart_ttl_calculation() {
         let fields = vec!["dlc", "screenshots", "name"];
         let ttl = SmartTtl::calculate_partial_refresh_ttl(&fields);
-        // Should use the shortest TTL (dlc = 3 days)
+        // Should use the shortest TTL (dlc = 30 days)
         assert_eq!(ttl, TtlConfig::DLC_LIST);
     }
 }

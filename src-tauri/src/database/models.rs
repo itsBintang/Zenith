@@ -167,18 +167,15 @@ impl GameDetailDb {
         }
     }
 
-    /// Check if this game detail entry is expired (smart granular check)
-    /// Uses the most restrictive (shortest) TTL among all data categories
+    /// Check if this game detail entry is expired (conservative check)
+    /// Only considers data expired if the dynamic data (most important) is expired
+    /// This prevents unnecessary API calls for stable data like screenshots
     pub fn is_expired(&self) -> bool {
         let now = Utc::now().timestamp();
         
-        // Use the shortest TTL to determine if ANY data category is expired
-        // This ensures we refresh when the most critical data (DLC) expires
-        let shortest_expiry = self.dynamic_expires_at
-            .min(self.semistatic_expires_at)
-            .min(self.static_expires_at);
-            
-        now > shortest_expiry
+        // Only force refresh if dynamic data (DLC) is expired
+        // For other expired categories, use stale-while-revalidate pattern
+        now > self.dynamic_expires_at
     }
     
     /// Check if this game detail entry is expired (legacy global check)
@@ -482,5 +479,62 @@ impl From<Game> for crate::LibraryGame {
             name: game.name,
             header_image: game.header_image,
         }
+    }
+}
+
+/// Database model for bypass_games table (static data with monthly TTL)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BypassGame {
+    pub app_id: String,
+    pub name: String,
+    pub image: String,
+    pub bypasses: Vec<BypassInfo>,
+    pub cached_at: i64,
+    pub expires_at: i64,
+    pub last_updated: i64,
+}
+
+/// Bypass info structure (matches frontend JSON)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BypassInfo {
+    pub r#type: u8,
+    pub url: String,
+}
+
+impl BypassGame {
+    /// Create a new BypassGame with 1 month TTL (static data)
+    pub fn new(app_id: String, name: String, image: String, bypasses: Vec<BypassInfo>) -> Self {
+        let now = chrono::Utc::now().timestamp();
+        let one_month = 30 * 24 * 60 * 60; // 1 month in seconds
+        
+        Self {
+            app_id,
+            name,
+            image,
+            bypasses,
+            cached_at: now,
+            expires_at: now + one_month,
+            last_updated: now,
+        }
+    }
+
+    /// Check if this bypass game entry is expired
+    pub fn is_expired(&self) -> bool {
+        chrono::Utc::now().timestamp() > self.expires_at
+    }
+
+    /// Convert from SQLite row
+    pub fn from_row(row: &Row) -> SqliteResult<Self> {
+        let bypasses_json: String = row.get(3)?;
+        
+        Ok(Self {
+            app_id: row.get(0)?,
+            name: row.get(1)?,
+            image: row.get(2)?,
+            bypasses: serde_json::from_str(&bypasses_json).unwrap_or_default(),
+            cached_at: row.get(4)?,
+            expires_at: row.get(5)?,
+            last_updated: row.get(6)?,
+        })
     }
 }

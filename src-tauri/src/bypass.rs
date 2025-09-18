@@ -531,6 +531,35 @@ pub async fn check_bypass_installed_command(app_id: String) -> Result<bool, Stri
     check_bypass_installed(&app_id).await
 }
 
+#[derive(Debug, Serialize)]
+pub struct GameInstallationInfo {
+    pub install_path: String,
+    pub steam_path: String,
+    pub game_folder: String,
+}
+
+#[command]
+pub async fn get_game_installation_info(app_id: String) -> Result<GameInstallationInfo, String> {
+    let steam_path = find_steam_installation_path().map_err(|e| e.to_string())?;
+    
+    let game_folder = match find_game_folder_from_acf(&app_id, &steam_path).await {
+        Some(folder) => folder,
+        None => return Err(format!("Game not found with app_id: {}", app_id)),
+    };
+    
+    let install_path = format!("{}/steamapps/common/{}", steam_path, game_folder);
+    
+    if !std::path::Path::new(&install_path).exists() {
+        return Err(format!("Game directory does not exist: {}", install_path));
+    }
+    
+    Ok(GameInstallationInfo {
+        install_path,
+        steam_path,
+        game_folder,
+    })
+}
+
 #[command]
 pub async fn check_bypass_availability(app_id: String) -> Result<BypassStatus, String> {
     println!("Checking bypass availability for AppID: {}", app_id);

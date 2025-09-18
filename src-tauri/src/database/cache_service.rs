@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::sleep;
 use crate::database::{DatabaseManager, operations::*};
-use crate::database::models::{Game, GameDetailDb};
+use crate::database::models::{Game, GameDetailDb, BypassGame, BypassInfo};
 use crate::GameDetail;
 
 /// Configuration for cache batch processing and rate limiting
@@ -592,6 +592,142 @@ impl SqliteCacheService {
         })?;
         
         Ok(result)
+    }
+
+    // ============= BYPASS GAMES CACHE METHODS =============
+
+    /// Get all bypass games from cache with 1 month TTL
+    pub async fn get_bypass_games(&self) -> Result<Vec<BypassGame>> {
+        // Try to get from cache first
+        let cached_games = self.db.with_connection(|conn| {
+            BypassGameOperations::get_all(conn)
+        })?;
+
+        // Check if we have valid cached data
+        if !cached_games.is_empty() && !cached_games.iter().any(|game| game.is_expired()) {
+            println!("Bypass games cache HIT: {} games", cached_games.len());
+            return Ok(cached_games);
+        }
+
+        println!("Bypass games cache MISS or expired - loading from fallback JSON");
+        
+        // If cache is empty or expired, load from JSON and cache it
+        self.load_bypass_games_from_json().await
+    }
+
+    /// Load bypass games from embedded JSON data and cache them
+    async fn load_bypass_games_from_json(&self) -> Result<Vec<BypassGame>> {
+        // Static bypass games data (matches src/data/bypassGames.json)
+        let json_data = r#"[
+  {
+    "appId": "1174180",
+    "name": "Red Dead Redemption 2",
+    "image": "https://itsbintang.github.io/cdn/1174180.jpg",
+    "bypasses": [
+      {
+        "type": 1,
+        "url": "https://bypass.nzr.web.id/1174180_1.zip"
+      }
+    ]
+  },
+  {
+    "appId": "1546990",
+    "name": "Grand Theft Auto: Vice City - The Definitive Edition",
+    "image": "https://itsbintang.github.io/cdn/1546990.jpg",
+    "bypasses": [
+      {
+        "type": 3,
+        "url": "http://cdn2.nzr.web.id/1546990_3.zip"
+      }
+    ]
+  },
+  {
+    "appId": "582160",
+    "name": "Assassin's Creed Origins",
+    "image": "https://itsbintang.github.io/cdn/582160.jpg",
+    "bypasses": [
+      {
+        "type": 1,
+        "url": "https://bypass.nzr.web.id/582160_1.zip"
+      }
+    ]
+  }
+]"#;
+
+        // Parse JSON data
+        #[derive(serde::Deserialize)]
+        struct JsonBypassGame {
+            #[serde(rename = "appId")]
+            app_id: String,
+            name: String,
+            image: String,
+            bypasses: Vec<JsonBypassInfo>,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct JsonBypassInfo {
+            r#type: u8,
+            url: String,
+        }
+
+        let json_games: Vec<JsonBypassGame> = serde_json::from_str(json_data)?;
+        
+        // Convert to BypassGame models
+        let mut bypass_games = Vec::new();
+        for json_game in json_games {
+            let bypasses = json_game.bypasses.into_iter()
+                .map(|b| BypassInfo { r#type: b.r#type, url: b.url })
+                .collect();
+            
+            let bypass_game = BypassGame::new(
+                json_game.app_id,
+                json_game.name,
+                json_game.image,
+                bypasses,
+            );
+            
+            bypass_games.push(bypass_game);
+        }
+
+        // Cache the data
+        self.db.with_connection(|conn| {
+            // Clear existing data first
+            BypassGameOperations::clear_all(conn)?;
+            
+            // Insert new data
+            for game in &bypass_games {
+                BypassGameOperations::insert(conn, game)?;
+            }
+            
+            Ok(())
+        })?;
+
+        println!("Bypass games cached successfully: {} games", bypass_games.len());
+        Ok(bypass_games)
+    }
+
+    /// Force refresh bypass games cache (useful for updates)
+    pub async fn refresh_bypass_games(&self) -> Result<Vec<BypassGame>> {
+        println!("Force refreshing bypass games cache...");
+        self.load_bypass_games_from_json().await
+    }
+
+    /// Get bypass game by app_id
+    pub async fn get_bypass_game(&self, app_id: &str) -> Result<Option<BypassGame>> {
+        // Check cache first
+        let cached_game = self.db.with_connection(|conn| {
+            BypassGameOperations::get_by_id(conn, app_id)
+        })?;
+
+        if let Some(game) = cached_game {
+            if !game.is_expired() {
+                return Ok(Some(game));
+            }
+        }
+
+        // If not found or expired, refresh all bypass games and try again
+        let all_games = self.get_bypass_games().await?;
+        Ok(all_games.into_iter().find(|g| g.app_id == app_id))
     }
 }
 

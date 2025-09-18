@@ -2332,6 +2332,7 @@ fn main() {
             bypass::install_bypass_with_type,
             bypass::install_bypass_direct,
             bypass::check_bypass_installed_command,
+            bypass::get_game_installation_info,
             bypass::check_bypass_availability,
             bypass::get_available_bypass_types,
             bypass::get_game_executables,
@@ -2356,6 +2357,12 @@ fn main() {
             database::commands::batch_refresh_games,
             database::commands::smart_refresh_library,
             database::commands::get_cache_config,
+            // Bypass Games Cache Commands
+            database::commands::get_bypass_games_cached,
+            database::commands::refresh_bypass_games_cache,
+            database::commands::clear_bypass_games_cache,
+            database::commands::get_bypass_game_by_id,
+            database::commands::get_bypass_games_cache_stats,
             // Profile Management Commands
             commands::get_user_profile,
             commands::update_profile_field,

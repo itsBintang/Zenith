@@ -1,6 +1,6 @@
 use anyhow::Result;
 use rusqlite::{params, Connection, OptionalExtension};
-use crate::database::models::{Game, GameDetailDb, UserLibraryEntry, CacheMetadata, UserProfile};
+use crate::database::models::{Game, GameDetailDb, UserLibraryEntry, CacheMetadata, UserProfile, BypassGame};
 
 /// Game operations
 pub struct GameOperations;
@@ -429,5 +429,111 @@ impl UserProfileOperations {
         }
         
         Ok(())
+    }
+}
+
+/// Bypass game operations
+pub struct BypassGameOperations;
+
+impl BypassGameOperations {
+    /// Insert a bypass game
+    pub fn insert(conn: &Connection, game: &BypassGame) -> Result<()> {
+        let bypasses_json = serde_json::to_string(&game.bypasses)?;
+        
+        conn.execute(
+            "INSERT OR REPLACE INTO bypass_games 
+             (app_id, name, image, bypasses, cached_at, expires_at, last_updated) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                game.app_id,
+                game.name,
+                game.image,
+                bypasses_json,
+                game.cached_at,
+                game.expires_at,
+                game.last_updated
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Get a bypass game by app_id
+    pub fn get_by_id(conn: &Connection, app_id: &str) -> Result<Option<BypassGame>> {
+        let mut stmt = conn.prepare(
+            "SELECT app_id, name, image, bypasses, cached_at, expires_at, last_updated 
+             FROM bypass_games WHERE app_id = ?1"
+        )?;
+        
+        let game = stmt.query_row([app_id], |row| BypassGame::from_row(row))
+            .optional()?;
+        
+        Ok(game)
+    }
+
+    /// Get all bypass games
+    pub fn get_all(conn: &Connection) -> Result<Vec<BypassGame>> {
+        let mut games = Vec::new();
+        
+        let mut stmt = conn.prepare(
+            "SELECT app_id, name, image, bypasses, cached_at, expires_at, last_updated 
+             FROM bypass_games ORDER BY name"
+        )?;
+        
+        let game_iter = stmt.query_map([], |row| BypassGame::from_row(row))?;
+        for game_result in game_iter {
+            games.push(game_result?);
+        }
+        
+        Ok(games)
+    }
+
+    /// Get expired bypass games
+    pub fn get_expired(conn: &Connection) -> Result<Vec<BypassGame>> {
+        let now = chrono::Utc::now().timestamp();
+        let mut games = Vec::new();
+        
+        let mut stmt = conn.prepare(
+            "SELECT app_id, name, image, bypasses, cached_at, expires_at, last_updated 
+             FROM bypass_games WHERE expires_at < ?1"
+        )?;
+        
+        let game_iter = stmt.query_map([now], |row| BypassGame::from_row(row))?;
+        for game_result in game_iter {
+            games.push(game_result?);
+        }
+        
+        Ok(games)
+    }
+
+    /// Clear all bypass games (for refresh)
+    pub fn clear_all(conn: &Connection) -> Result<()> {
+        conn.execute("DELETE FROM bypass_games", [])?;
+        Ok(())
+    }
+
+    /// Delete a specific bypass game
+    pub fn delete_by_id(conn: &Connection, app_id: &str) -> Result<()> {
+        conn.execute("DELETE FROM bypass_games WHERE app_id = ?1", [app_id])?;
+        Ok(())
+    }
+
+    /// Count total bypass games
+    pub fn count(conn: &Connection) -> Result<u32> {
+        let count: u32 = conn.query_row(
+            "SELECT COUNT(*) FROM bypass_games",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(count)
+    }
+
+    /// Clean up expired bypass games
+    pub fn cleanup_expired(conn: &Connection) -> Result<u32> {
+        let now = chrono::Utc::now().timestamp();
+        let rows_affected = conn.execute(
+            "DELETE FROM bypass_games WHERE expires_at < ?1",
+            [now],
+        )?;
+        Ok(rows_affected as u32)
     }
 }

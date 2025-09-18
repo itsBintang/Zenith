@@ -33,7 +33,7 @@ function ToastNotification({ message, type, onClose }) {
 }
 
 // HeroPanel component for actions and info
-function HeroPanel({ detail, onAddToLibrary, onRemoveFromLibrary, isDownloading, isInLibrary }) {
+function HeroPanel({ detail, onAddToLibrary, onRemoveFromLibrary, isDownloading, isInLibrary, bypassInstalled, onLaunchBypassGame, isLaunching }) {
   const formatDate = (dateStr) => {
     if (!dateStr) return "N/A";
     const date = new Date(dateStr);
@@ -57,14 +57,26 @@ function HeroPanel({ detail, onAddToLibrary, onRemoveFromLibrary, isDownloading,
             {isDownloading ? "Installing..." : "Add to library"}
           </button>
         ) : (
-          <button 
-            className="hero-button hero-button--danger" 
-            onClick={onRemoveFromLibrary}
-            disabled={isDownloading}
-          >
-            <FiTrash2 /> 
-            {isDownloading ? "Removing..." : "Remove from library"}
-          </button>
+          <>
+            {bypassInstalled && (
+              <button 
+                className="hero-button hero-button--play" 
+                onClick={onLaunchBypassGame}
+                disabled={isLaunching || isDownloading}
+              >
+                <FiPlay /> 
+                {isLaunching ? "Launching..." : "Play"}
+              </button>
+            )}
+            <button 
+              className="hero-button hero-button--danger" 
+              onClick={onRemoveFromLibrary}
+              disabled={isDownloading}
+            >
+              <FiTrash2 /> 
+              {isDownloading ? "Removing..." : "Remove from library"}
+            </button>
+          </>
         )}
       </div>
     </div>
@@ -179,6 +191,11 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
   // Update related states
   const [isUpdating, setIsUpdating] = useState(false);
 
+  // Bypass related states
+  const [bypassInstalled, setBypassInstalled] = useState(false);
+  const [gameExecutables, setGameExecutables] = useState([]);
+  const [isLaunching, setIsLaunching] = useState(false);
+
   useEffect(() => {
     let mounted = true;
     let hasRequested = false;
@@ -196,6 +213,7 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
           setGameColor("#2a2a3a");
           setIsLoading(false);
           checkIfInLibrary(appId);
+          checkBypassStatus(appId);
           // DRM data sudah ada di game detail response
           if (d.drm_notice) {
             setDrmData(d.drm_notice);
@@ -230,6 +248,70 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
       console.error("Error checking library:", error);
       // Don't fallback to fetching all games - it's too expensive
       setIsInLibrary(false);
+    }
+  };
+
+  const checkBypassStatus = async (appId) => {
+    try {
+      const isRunningInTauri = await isTauri();
+      if (!isRunningInTauri) return;
+
+      const isInstalled = await invoke("check_bypass_installed_command", { appId });
+      setBypassInstalled(isInstalled);
+      
+      if (isInstalled) {
+        // Load game executables when bypass is installed
+        await loadGameExecutables(appId);
+      }
+    } catch (error) {
+      console.error("Error checking bypass status:", error);
+      setBypassInstalled(false);
+    }
+  };
+
+  const loadGameExecutables = async (appId) => {
+    try {
+      // Get game installation path first
+      const gameInfo = await invoke("get_game_installation_info", { appId });
+      if (gameInfo && gameInfo.install_path) {
+        const bypassNotes = await invoke("get_bypass_notes", { 
+          gamePath: gameInfo.install_path
+        });
+        setGameExecutables(bypassNotes.exe_list || []);
+      }
+    } catch (error) {
+      console.error("Error loading game executables:", error);
+      setGameExecutables([]);
+    }
+  };
+
+  const handleLaunchBypassGame = async () => {
+    if (!detail || !bypassInstalled || gameExecutables.length === 0 || isLaunching) return;
+
+    setIsLaunching(true);
+    try {
+      // Use the first/recommended executable or show selection if multiple
+      const selectedExecutable = gameExecutables[0]; // For now, use first one
+      
+      const result = await invoke("confirm_and_launch_game", { 
+        executablePath: selectedExecutable.path,
+        gameName: detail.name
+      });
+      
+      setNotification({
+        message: `${detail.name} launched successfully with bypass!`,
+        type: 'success'
+      });
+      
+      console.log("Launch result:", result);
+    } catch (error) {
+      console.error("Launch game error:", error);
+      setNotification({
+        message: `Failed to launch ${detail.name}: ${error}`,
+        type: 'error'
+      });
+    } finally {
+      setIsLaunching(false);
     }
   };
 
@@ -438,6 +520,9 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
           onRemoveFromLibrary={handleRemoveFromLibrary}
           isDownloading={isDownloading}
           isInLibrary={isInLibrary}
+          bypassInstalled={bypassInstalled}
+          onLaunchBypassGame={handleLaunchBypassGame}
+          isLaunching={isLaunching}
         />
 
         {/* Main Content */}

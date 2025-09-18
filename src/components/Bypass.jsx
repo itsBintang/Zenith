@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { FiShield, FiPlay, FiCheck, FiX, FiSearch, FiRefreshCw } from "react-icons/fi";
+import { FiShield, FiPlay, FiCheck, FiX, FiSearch } from "react-icons/fi";
 import { isTauri } from '@tauri-apps/api/core';
-import bypassGamesData from "../data/bypassGames.json";
 import "../styles/Bypass.css";
 
 // Toast Notification Component
@@ -33,44 +32,23 @@ function ToastNotification({ message, type, onClose }) {
 
 // Game Card Component for Bypass
 function GameCard({ game, onBypassClick, bypassStatus, isLoading }) {
+  const isInstalled = bypassStatus[game.appId]?.installed;
+  const isInstalling = bypassStatus[game.appId]?.installing;
+  
   return (
-    <div className="bypass-game-card">
-      <div className="bypass-game-card__image">
-        <img
-          src={game.image}
-          alt={game.name}
-          onError={(e) => {
-            e.target.src = '/placeholder-game.jpg';
-          }}
-        />
-      </div>
-      <div className="bypass-game-card__content">
-        <h3 className="bypass-game-card__title">{game.name}</h3>
-        <p className="bypass-game-card__id">App ID: {game.appId}</p>
-        <div className="bypass-game-card__types">
-          <span className="bypass-types">
-            Available Types: {game.bypasses.map(b => `Type ${b.type}`).join(', ')}
-          </span>
+    <div 
+      className={`bypass-game-card ${isInstalled ? 'bypass-game-card--installed' : ''} ${isInstalling ? 'bypass-game-card--installing' : ''}`}
+      onClick={() => !isLoading && !isInstalling && onBypassClick(game)}
+      style={{ cursor: isLoading || isInstalling ? 'not-allowed' : 'pointer' }}
+    >
+      <div
+        className="bypass-game-card__image"
+        style={{ backgroundImage: `url(${game.image})` }}
+      />
+      <div className="bypass-game-card__overlay">
+        <div className="bypass-game-card__content">
+          <h3 className="bypass-game-card__title">{game.name}</h3>
         </div>
-        <button 
-          className={`bypass-game-card__button ${
-            bypassStatus[game.appId]?.installed ? 'installed' : ''
-          } ${bypassStatus[game.appId]?.installing ? 'installing' : ''}`}
-          onClick={() => onBypassClick(game)}
-          disabled={isLoading || bypassStatus[game.appId]?.installing}
-        >
-          {bypassStatus[game.appId]?.installing ? (
-            <>
-              <div className="spinner"></div>
-              Installing...
-            </>
-          ) : (
-            <>
-              <FiShield />
-              {bypassStatus[game.appId]?.installed ? 'Bypass Installed' : 'Install Bypass'}
-            </>
-          )}
-        </button>
       </div>
     </div>
   );
@@ -143,11 +121,15 @@ function Bypass() {
   const loadBypassGames = async () => {
     try {
       setIsLoading(true);
-      // Load games from JSON data
-      setBypassGames(bypassGamesData);
+      
+      // Load games from SQLite cache with 1 month TTL
+      const gamesData = await invoke("get_bypass_games_cached");
+      console.log('Loaded bypass games from cache:', gamesData);
+      
+      setBypassGames(gamesData);
       
       // Check bypass status for all games
-      const statusPromises = bypassGamesData.map(async (game) => {
+      const statusPromises = gamesData.map(async (game) => {
         try {
           const isInstalled = await invoke("check_bypass_installed_command", { appId: game.appId });
           return { appId: game.appId, installed: isInstalled };
@@ -170,7 +152,7 @@ function Bypass() {
     } catch (error) {
       console.error('Error loading bypass games:', error);
       setNotification({
-        message: 'Failed to load bypass games',
+        message: 'Failed to load bypass games from cache',
         type: 'error'
       });
     } finally {
@@ -337,9 +319,6 @@ function Bypass() {
     }
   };
 
-  const handleRefreshLibrary = () => {
-    loadBypassGames();
-  };
 
   const closeNotification = () => {
     setNotification(null);
@@ -365,35 +344,21 @@ function Bypass() {
 
       {/* Header */}
       <div className="bypass-header">
-        <div className="bypass-header__title">
-          <FiShield size={32} />
-          <h1>Bypass Manager</h1>
+        <div className="bypass-header__left">
+          <h1>Bypass</h1>
         </div>
-        <p className="bypass-header__subtitle">
-          Manage bypass installations for your library games
-        </p>
-      </div>
-
-      {/* Controls */}
-      <div className="bypass-controls">
-        <div className="bypass-search">
-          <FiSearch className="bypass-search__icon" />
-          <input
-            type="text"
-            placeholder="Search games..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="bypass-search__input"
-          />
+        <div className="bypass-header__right">
+          <div className="bypass-search">
+            <FiSearch className="bypass-search__icon" />
+            <input
+              type="text"
+              placeholder="Search games..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="bypass-search__input"
+            />
+          </div>
         </div>
-        <button 
-          className="bypass-refresh-btn"
-          onClick={handleRefreshLibrary}
-          disabled={isLoading}
-        >
-          <FiRefreshCw className={isLoading ? 'spinning' : ''} />
-          Refresh
-        </button>
       </div>
 
       {/* Games Grid */}
@@ -491,30 +456,16 @@ function Bypass() {
         <div className="modal-overlay">
           <div className="launch-popup-modal">
             <div className="launch-popup-content">
-              <FiPlay className="launch-icon" />
-              <h3>🎉 Bypass Berhasil Diinstall!</h3>
+              <h3>Bypass Terinstal</h3>
               
-              <div className="launch-popup-info">
-                <div className="info-section">
-                  <h4>📋 Penting untuk Diperhatikan:</h4>
-                  <ul className="info-list">
-                    <li>✅ <strong>Bypass hanya berhasil</strong> jika kamu main <strong>PERTAMA KALI</strong> lewat launcher ini</li>
-                    <li>🚫 <strong>JANGAN</strong> buka game lewat Steam atau shortcut lain</li>
-                    <li>🎯 <strong>WAJIB</strong> launch dari tombol "Yes, Launch Game" di bawah</li>
-                    <li>🔄 Kalau udah pernah buka lewat Steam, bypass mungkin gak jalan</li>
-                  </ul>
-                </div>
-                
-                <div className="warning-section">
-                  <p className="warning-text">
-                    ⚠️ <strong>Ingat:</strong> Bypass cuma work kalau game di-launch lewat path yang benar pertama kali. 
-                    Kalau kamu buka lewat Steam dulu, kemungkinan bypass gak akan aktif.
-                  </p>
-                </div>
+              <div className="launch-popup-info simplified">
+                <p>
+                  <strong>Penting:</strong> Untuk mengaktifkan bypass, game harus dijalankan <strong>pertama kali</strong> dari sini. Jangan buka melalui Steam atau shortcut lain.
+                </p>
               </div>
 
               <div className="launch-popup-question">
-                <h4>🎮 Pilih executable untuk launch game:</h4>
+                <h4>Pilih executable untuk launch game:</h4>
               </div>
 
               <div className="executable-list">
