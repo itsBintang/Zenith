@@ -1,4 +1,3 @@
-use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use crate::steam_utils::{find_game_folder_from_acf, find_steam_installation_path};
 use std::fs::{self, File};
@@ -49,38 +48,7 @@ pub struct BypassResult {
     pub game_executable_path: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum BypassType {
-    Type1, // Files only - flat copy to root
-    Type2, // Folders and files - preserve structure  
-    Type3, // Advanced mixed content
-    Type4, // Custom installation method
-    Type5, // Registry/config based
-    // Add more types as needed
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BypassInfo {
-    pub app_id: String,
-    pub bypass_type: BypassType,
-    pub file_suffix: u8, // 1, 2, 3, etc.
-    pub description: String,
-}
-
-#[derive(Debug)]
-enum BypassStructure {
-    FlatFiles,
-    FoldersWithContent,
-    MixedContent,
-}
-
-lazy_static! {
-    // Multiple bypass download sources with fallback mechanism
-    pub static ref BYPASS_SOURCES: Vec<&'static str> = vec![
-        "https://bypass.nzr.web.id",
-        "http://cdn2.nzr.web.id/",
-    ];
-}
+// Removed BYPASS_SOURCES - now using URLs directly from JSON data
 
 pub async fn check_bypass_installed(app_id: &str) -> Result<bool, String> {
     // Check if bypass files exist in game directory
@@ -109,308 +77,12 @@ pub async fn check_bypass_installed(app_id: &str) -> Result<bool, String> {
 }
 
 #[command]
-pub async fn get_available_bypass_types(app_id: String) -> Result<Vec<BypassInfo>, String> {
-    println!("Getting available bypass types for AppID: {}", app_id);
-    let available_bypasses = detect_available_bypass_types(&app_id).await;
-    Ok(available_bypasses)
-}
-
-#[command]
 pub async fn install_bypass(app_id: String, window: tauri::Window) -> Result<BypassResult, String> {
     install_bypass_with_type(app_id, None, window).await
 }
 
-#[derive(Debug, serde::Deserialize)]
-pub struct BypassInfoDirect {
-    pub r#type: u8,
-    pub url: String,
-}
-
 #[command]
-pub async fn install_bypass_direct(
-    app_id: String,
-    game_name: String,
-    bypasses: Vec<BypassInfoDirect>,
-    window: tauri::Window
-) -> Result<BypassResult, String> {
-    println!("🚀 Starting direct bypass installation for AppID: {} ({})", app_id, game_name);
-    println!("🔧 Available bypasses: {:?}", bypasses);
-    println!("================================");
-
-    let emit_progress = |step: &str, progress: f64| {
-        println!("📊 Progress: {:.1}% - {}", progress, step);
-        let _ = window.emit(
-            "bypass_progress",
-            BypassProgress {
-                step: step.to_string(),
-                progress,
-                app_id: app_id.clone(),
-            },
-        );
-    };
-
-    emit_progress("Starting bypass installation...", 0.0);
-
-    // Find game installation path
-    let steam_path = find_steam_installation_path().map_err(|e| e.to_string())?;
-    let game_folder = match find_game_folder_from_acf(&app_id, &steam_path).await {
-        Some(folder) => {
-            println!("✅ Game folder found: {}", folder);
-            folder
-        },
-        None => {
-            println!("❌ Failed to find game with app_id: {}", app_id);
-            return Err(format!("Game not found with app_id: {}", app_id));
-        }
-    };
-
-    // Build full game path
-    let game_path = format!("{}/steamapps/common/{}", steam_path, game_folder);
-    println!("🎯 Full game path: {}", game_path);
-
-    // Verify game path exists
-    if !std::path::Path::new(&game_path).exists() {
-        return Err(format!("Game directory does not exist: {}", game_path));
-    }
-
-    emit_progress("Game found, downloading bypass...", 20.0);
-
-    // Try each bypass type until one succeeds
-    let mut last_error = String::new();
-    for bypass_info in &bypasses {
-        println!("🔄 Trying bypass type {} from: {}", bypass_info.r#type, bypass_info.url);
-        
-        match install_bypass_from_url(&bypass_info.url, &game_path, Some(bypass_info.r#type), &window, &app_id).await {
-            Ok(_) => {
-                emit_progress("Bypass installed successfully!", 100.0);
-                println!("✅ Bypass installation completed successfully!");
-                
-                return Ok(BypassResult {
-                    success: true,
-                    message: "Bypass installed successfully".to_string(),
-                    should_launch: true,
-                    game_executable_path: Some(game_path.clone()),
-                });
-            },
-            Err(e) => {
-                println!("❌ Bypass type {} failed: {}", bypass_info.r#type, e);
-                last_error = e;
-                continue;
-            }
-        }
-    }
-
-    Err(format!("All bypass types failed. Last error: {}", last_error))
-}
-
-async fn install_bypass_from_url(
-    url: &str,
-    game_path: &str,
-    bypass_type: Option<u8>,
-    window: &tauri::Window,
-    app_id: &str
-) -> Result<(), String> {
-    println!("📥 Downloading bypass from: {}", url);
-    
-    // Step 1: Initialize download (30-40%)
-    let _ = window.emit(
-        "bypass_progress",
-        BypassProgress {
-            step: "Starting download...".to_string(),
-            progress: 30.0,
-            app_id: app_id.to_string(),
-        },
-    );
-
-    let client = reqwest::Client::builder()
-        .user_agent("Zenith-Bypass/1.0")
-        .timeout(Duration::from_secs(300))
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
-
-    let response = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to download bypass: {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!("HTTP {} for: {}", response.status(), url));
-    }
-
-    // Get content length for progress tracking
-    let content_length = response.content_length();
-    let mut downloaded = 0u64;
-    let mut last_progress_update = std::time::Instant::now();
-
-    let _ = window.emit(
-        "bypass_progress",
-        BypassProgress {
-            step: "Downloading bypass files...".to_string(),
-            progress: 35.0,
-            app_id: app_id.to_string(),
-        },
-    );
-
-    // Step 2: Download with progress tracking (35-55%)
-    let content = if let Some(total) = content_length {
-        // If we have content length, track download progress
-        let mut content = Vec::with_capacity(total as usize);
-        let mut response_reader = response;
-        
-        loop {
-            match response_reader.chunk().await {
-                Ok(Some(chunk)) => {
-                    content.extend_from_slice(&chunk);
-                    downloaded += chunk.len() as u64;
-
-                    // Update progress every 500ms
-                    if last_progress_update.elapsed() >= Duration::from_millis(500) {
-                        let progress = 35.0 + (downloaded as f64 / total as f64) * 20.0; // 35% to 55%
-                        let step_text = format!(
-                            "Downloading... {:.1} MB / {:.1} MB ({:.1}%)",
-                            downloaded as f64 / 1_048_576.0,
-                            total as f64 / 1_048_576.0,
-                            (downloaded as f64 / total as f64) * 100.0
-                        );
-
-                        let _ = window.emit(
-                            "bypass_progress",
-                            BypassProgress {
-                                step: step_text,
-                                progress,
-                                app_id: app_id.to_string(),
-                            },
-                        );
-                        last_progress_update = std::time::Instant::now();
-                    }
-                },
-                Ok(None) => break, // End of stream
-                Err(e) => return Err(format!("Failed to read chunk: {}", e)),
-            }
-        }
-        content
-    } else {
-        // If no content length, download all at once
-        response.bytes().await
-            .map_err(|e| format!("Failed to read response: {}", e))?
-            .to_vec()
-    };
-
-    // Step 3: Prepare extraction (55-60%)
-    let _ = window.emit(
-        "bypass_progress",
-        BypassProgress {
-            step: "Preparing extraction...".to_string(),
-            progress: 55.0,
-            app_id: app_id.to_string(),
-        },
-    );
-
-    // Create temporary directory for extraction
-    let temp_dir = std::env::temp_dir().join(format!("zenith_bypass_{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&temp_dir)
-        .map_err(|e| format!("Failed to create temp directory: {}", e))?;
-
-    // Step 4: Extract with progress tracking (60-75%)
-    let _ = window.emit(
-        "bypass_progress",
-        BypassProgress {
-            step: "Extracting bypass files...".to_string(),
-            progress: 60.0,
-            app_id: app_id.to_string(),
-        },
-    );
-
-    let cursor = std::io::Cursor::new(content);
-    let mut archive = zip::ZipArchive::new(cursor)
-        .map_err(|e| format!("Failed to open ZIP archive: {}", e))?;
-
-    let total_files = archive.len();
-    for i in 0..total_files {
-        let mut file = archive.by_index(i)
-            .map_err(|e| format!("Failed to read ZIP entry: {}", e))?;
-        
-        let outpath = match file.enclosed_name() {
-            Some(path) => temp_dir.join(path),
-            None => continue,
-        };
-
-        if file.is_dir() {
-            std::fs::create_dir_all(&outpath)
-                .map_err(|e| format!("Failed to create directory: {}", e))?;
-        } else {
-            if let Some(p) = outpath.parent() {
-                if !p.exists() {
-                    std::fs::create_dir_all(&p)
-                        .map_err(|e| format!("Failed to create parent directory: {}", e))?;
-                }
-            }
-            let mut outfile = std::fs::File::create(&outpath)
-                .map_err(|e| format!("Failed to create output file: {}", e))?;
-            std::io::copy(&mut file, &mut outfile)
-                .map_err(|e| format!("Failed to extract file: {}", e))?;
-        }
-
-        // Update extraction progress
-        if i % 5 == 0 || i == total_files - 1 { // Update every 5 files or on last file
-            let extraction_progress = 60.0 + ((i + 1) as f64 / total_files as f64) * 15.0; // 60% to 75%
-            let _ = window.emit(
-                "bypass_progress",
-                BypassProgress {
-                    step: format!("Extracting... {} / {} files", i + 1, total_files),
-                    progress: extraction_progress,
-                    app_id: app_id.to_string(),
-                },
-            );
-        }
-    }
-
-    // Step 5: Install files with progress tracking (75-95%)
-    let _ = window.emit(
-        "bypass_progress",
-        BypassProgress {
-            step: "Installing bypass files...".to_string(),
-            progress: 75.0,
-            app_id: app_id.to_string(),
-        },
-    );
-
-    // Install bypass files with progress callback
-    install_bypass_files_with_type_progress(
-        temp_dir.to_str().unwrap(),
-        game_path,
-        bypass_type,
-        window,
-        app_id
-    ).await?;
-
-    // Step 6: Cleanup (95-100%)
-    let _ = window.emit(
-        "bypass_progress",
-        BypassProgress {
-            step: "Cleaning up...".to_string(),
-            progress: 95.0,
-            app_id: app_id.to_string(),
-        },
-    );
-
-    let _ = std::fs::remove_dir_all(&temp_dir);
-
-    let _ = window.emit(
-        "bypass_progress",
-        BypassProgress {
-            step: "Installation complete!".to_string(),
-            progress: 100.0,
-            app_id: app_id.to_string(),
-        },
-    );
-
-    Ok(())
-}
-
-#[command] 
-pub async fn install_bypass_with_type(app_id: String, bypass_type: Option<u8>, window: tauri::Window) -> Result<BypassResult, String> {
+pub async fn install_bypass_with_type(app_id: String, _bypass_type: Option<u8>, window: tauri::Window) -> Result<BypassResult, String> {
     // Check if bypass is already installed
     let is_reinstall = check_bypass_installed(&app_id).await.unwrap_or(false);
 
@@ -418,7 +90,7 @@ pub async fn install_bypass_with_type(app_id: String, bypass_type: Option<u8>, w
         println!("🔄 Starting bypass REINSTALLATION for AppID: {}", app_id);
         println!("   (Previous installation detected - will overwrite)");
     } else {
-        println!("🚀 Starting bypass installation for AppID: {}", app_id);
+        println!("🚀 Starting UNIVERSAL bypass installation for AppID: {}", app_id);
     }
     println!("================================");
 
@@ -464,32 +136,29 @@ pub async fn install_bypass_with_type(app_id: String, bypass_type: Option<u8>, w
 
     println!("✅ Game directory validated successfully");
 
-    // Step 3: Check bypass availability and find working source
-    emit_progress("Checking bypass availability...", 30.0);
+    // Step 3: Download bypass using URL from JSON
+    emit_progress("Downloading bypass files...", 30.0);
     
-    // Step 4: Download bypass from multiple sources  
-    emit_progress("Downloading bypass files...", 40.0);
-
-    let download_path = download_bypass_from_multiple_sources(&window, &app_id, bypass_type)
+    let download_path = download_bypass_from_json(&window, &app_id)
         .await
         .map_err(|e| {
             println!("❌ Download completely failed: {}", e);
             format!("Failed to download bypass: {}", e)
         })?;
 
-    // Step 5: Extract bypass
-    emit_progress("Extracting bypass files...", 70.0);
+    // Step 4: Extract bypass
+    emit_progress("Extracting bypass files...", 60.0);
     let extract_path = extract_bypass(&download_path)
         .await
         .map_err(|e| format!("Failed to extract bypass: {}", e))?;
 
-    // Step 6: Install bypass files with specific type
+    // Step 5: Install bypass files - UNIVERSAL METHOD (pure copy structure)
     emit_progress("Installing bypass to game directory...", 85.0);
-    install_bypass_files_with_type(&extract_path, &game_path, bypass_type)
+    install_bypass_files_universal(&extract_path, &game_path)
         .await
         .map_err(|e| format!("Failed to install bypass: {}", e))?;
 
-    // Step 7: Cleanup
+    // Step 6: Cleanup
     emit_progress("Finalizing installation...", 95.0);
     cleanup_temp_files(&download_path, &extract_path)?;
     println!("🧹 Cleaned up temporary files");
@@ -498,7 +167,7 @@ pub async fn install_bypass_with_type(app_id: String, bypass_type: Option<u8>, w
     let installed_marker = format!("{}/bypass_installed.txt", game_path);
     let timestamp = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S");
     let marker_content = format!(
-        "Bypass installed by Zenith\nAppID: {}\nInstalled: {}\nGame Path: {}",
+        "Bypass installed by Zenith (Universal Method)\nAppID: {}\nInstalled: {}\nGame Path: {}",
         app_id, timestamp, game_path
     );
     let _ = fs::write(&installed_marker, marker_content);
@@ -513,16 +182,15 @@ pub async fn install_bypass_with_type(app_id: String, bypass_type: Option<u8>, w
     emit_progress(final_message, 100.0);
 
     println!("🎉 Bypass {} completed successfully!", action_word);
-    println!("🎯 Always showing launch popup - user can choose executable");
     println!("📁 Game directory: {}", game_path);
     println!("================================");
 
-    // Always show launch popup and let user navigate to executable
+    // Don't show launch popup - just finish bypass installation
     Ok(BypassResult {
         success: true,
         message: final_message.to_string(),
-        should_launch: true,                   // Always true - show popup
-        game_executable_path: Some(game_path), // Pass game directory path
+        should_launch: false,  // Don't show popup
+        game_executable_path: None, // No need to pass path
     })
 }
 
@@ -558,143 +226,6 @@ pub async fn get_game_installation_info(app_id: String) -> Result<GameInstallati
         steam_path,
         game_folder,
     })
-}
-
-#[command]
-pub async fn check_bypass_availability(app_id: String) -> Result<BypassStatus, String> {
-    println!("Checking bypass availability for AppID: {}", app_id);
-
-    // Check if bypass already installed first
-    let is_installed = check_bypass_installed(&app_id).await.unwrap_or(false);
-
-    // Check for available bypass types (numbered files)
-    let available_bypasses = detect_available_bypass_types(&app_id).await;
-    
-    if !available_bypasses.is_empty() {
-        println!("✅ Found {} bypass type(s) for AppID: {}", available_bypasses.len(), app_id);
-        for bypass_info in &available_bypasses {
-            println!("   Type {}: {}", bypass_info.file_suffix, bypass_info.description);
-        }
-        
-        return Ok(BypassStatus {
-            available: true,
-            installing: false,
-            installed: is_installed,
-        });
-    }
-
-    println!("❌ No bypass types available from any source");
-    Ok(BypassStatus {
-        available: false,
-        installing: false,
-        installed: is_installed,
-    })
-}
-
-async fn detect_available_bypass_types(app_id: &str) -> Vec<BypassInfo> {
-    let mut available_bypasses = Vec::new();
-    
-    println!("🔍 Checking bypass availability across {} sources", BYPASS_SOURCES.len());
-    for source in BYPASS_SOURCES.iter() {
-        println!("   - Source: {}", source);
-    }
-    
-    // Check for numbered bypass files (1-10 for now, can be extended)
-    for bypass_number in 1..=10 {
-        let mut found_for_this_number = false;
-        
-        for source in BYPASS_SOURCES.iter() {
-            let bypass_url = format!("{}/{}_{}.zip", source, app_id, bypass_number);
-            println!("🔍 Checking: {}", bypass_url);
-            
-            match DOWNLOAD_CLIENT.head(&bypass_url).send().await {
-                Ok(response) => {
-                    if response.status().is_success() {
-                        println!("✅ Found bypass type {} at source: {}", bypass_number, source);
-                        
-                        // Create bypass info based on type number
-                        let bypass_type = match bypass_number {
-                            1 => BypassType::Type1,
-                            2 => BypassType::Type2,
-                            3 => BypassType::Type3,
-                            4 => BypassType::Type4,
-                            5 => BypassType::Type5,
-                            _ => BypassType::Type1, // Default fallback
-                        };
-                        
-                        let description = get_bypass_type_description(&bypass_type);
-                        
-                        let bypass_info = BypassInfo {
-                            app_id: app_id.to_string(),
-                            bypass_type,
-                            file_suffix: bypass_number,
-                            description,
-                        };
-                        
-                        available_bypasses.push(bypass_info);
-                        found_for_this_number = true;
-                        break; // Found this type, move to next number
-                    } else {
-                        println!("❌ HTTP {} for: {}", response.status(), bypass_url);
-                    }
-                }
-                Err(e) => {
-                    println!("❌ Network error for {}: {}", bypass_url, e);
-                    // Continue to next source
-                    continue;
-                }
-            }
-        }
-        
-        // If we didn't find this number in any source, we can break early
-        // (assuming bypass files are numbered consecutively)
-        if !found_for_this_number {
-            println!("🔍 No bypass type {} found in any source, checking next numbers...", bypass_number);
-        }
-    }
-    
-    // Also check for legacy bypass (no number suffix)
-    println!("🔍 Checking for legacy bypass files (no number suffix)");
-    for source in BYPASS_SOURCES.iter() {
-        let bypass_url = format!("{}/{}.zip", source, app_id);
-        println!("🔍 Checking legacy: {}", bypass_url);
-        
-        match DOWNLOAD_CLIENT.head(&bypass_url).send().await {
-            Ok(response) => {
-                if response.status().is_success() {
-                    println!("✅ Found legacy bypass at source: {}", source);
-                    
-                    let bypass_info = BypassInfo {
-                        app_id: app_id.to_string(),
-                        bypass_type: BypassType::Type1, // Default to Type1 for legacy
-                        file_suffix: 0, // 0 indicates legacy/no suffix
-                        description: "Legacy bypass (auto-detect)".to_string(),
-                    };
-                    
-                    available_bypasses.push(bypass_info);
-                    break;
-                } else {
-                    println!("❌ HTTP {} for legacy: {}", response.status(), bypass_url);
-                }
-            }
-            Err(e) => {
-                println!("❌ Network error for legacy {}: {}", bypass_url, e);
-                continue;
-            }
-        }
-    }
-    
-    available_bypasses
-}
-
-fn get_bypass_type_description(bypass_type: &BypassType) -> String {
-    match bypass_type {
-        BypassType::Type1 => "Files only - flat copy to root".to_string(),
-        BypassType::Type2 => "Folders and files - preserve structure".to_string(), 
-        BypassType::Type3 => "Advanced mixed content".to_string(),
-        BypassType::Type4 => "Custom installation method".to_string(),
-        BypassType::Type5 => "Registry/config based".to_string(),
-    }
 }
 
 #[command]
@@ -921,83 +452,126 @@ fn extract_recommended_exe(content: &str) -> Option<String> {
 #[command]
 pub async fn confirm_and_launch_game(
     executable_path: String,
+    game_name: String,
 ) -> Result<String, String> {
-    println!("Launching game from path: {}", executable_path);
-    let path = Path::new(&executable_path);
-    let game_dir = path.parent().ok_or("Invalid executable path")?;
+    println!("🎮 User confirmed to launch game: {}", game_name);
+    println!("📁 Executable path: {}", executable_path);
 
-    let mut command = Command::new(&executable_path);
-    command.current_dir(game_dir);
-
-    match command.spawn() {
-        Ok(_) => {
-            println!("Game launched successfully");
-            Ok("Game launched!".to_string())
-        }
-        Err(e) => {
-            println!("Failed to launch game: {}", e);
-            Err(format!("Failed to launch game: {}", e))
-        }
-    }
+    launch_game_executable(executable_path).await
 }
 
 #[command]
-pub async fn launch_game_executable(executable_path: String, game_path: String) -> Result<(), String> {
-    Command::new(&executable_path)
-        .current_dir(&game_path)
+pub async fn launch_game_executable(executable_path: String) -> Result<String, String> {
+    println!("🚀 Attempting to launch game: {}", executable_path);
+
+    // Validate file exists
+    if !Path::new(&executable_path).exists() {
+        let error_msg = format!("Game executable not found: {}", executable_path);
+        println!("❌ {}", error_msg);
+        return Err(error_msg);
+    }
+
+    // Validate it's an .exe file
+    if !executable_path.to_lowercase().ends_with(".exe") {
+        let error_msg = format!("File is not an executable (.exe): {}", executable_path);
+        println!("❌ {}", error_msg);
+        return Err(error_msg);
+    }
+
+    // Check file size (should be reasonable for a game executable)
+    if let Ok(metadata) = std::fs::metadata(&executable_path) {
+        let file_size = metadata.len();
+        println!(
+            "📊 Executable size: {:.2} MB",
+            file_size as f64 / 1_048_576.0
+        );
+
+        if file_size < 500_000 {
+            // Less than 500KB seems too small for a game
+            println!("⚠️  Warning: Executable seems very small for a game");
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        println!("🎮 Launching game executable...");
+        match Command::new(&executable_path)
+            .current_dir(
+                Path::new(&executable_path)
+                    .parent()
+                    .unwrap_or(Path::new(".")),
+            )
         .spawn()
-        .map_err(|e| format!("Failed to launch executable: {}", e))?;
-    Ok(())
+        {
+            Ok(child) => {
+                println!("✅ Game process started successfully!");
+                println!("   PID: {:?}", child.id());
+                println!("   Path: {}", executable_path);
+                println!("   Working Dir: {:?}", Path::new(&executable_path).parent());
+
+                // Don't wait for the game to finish, just confirm it started
+                Ok(
+                    "Game launched successfully! The game is now running with bypass enabled."
+                        .to_string(),
+                )
+            }
+            Err(e) => {
+                let error_msg = format!("Failed to launch game: {}", e);
+                println!("❌ {}", error_msg);
+                Err(error_msg)
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Game launching is only supported on Windows".to_string())
+    }
 }
 
-// Update functions moved to main.rs - these were incorrectly placed here during refactor
+// ====================== BYPASS DOWNLOAD & INSTALL FUNCTIONS ======================
 
-async fn download_bypass_from_multiple_sources(
+async fn download_bypass_from_json(
     window: &tauri::Window,
     app_id: &str,
-    bypass_type: Option<u8>,
 ) -> Result<String, String> {
-    println!("📥 Starting bypass download from multiple sources");
+    println!("📥 Starting bypass download using URLs from JSON");
+
+    // Get bypass game data from cache
+    let bypass_game = crate::database::cache_service::SQLITE_CACHE_SERVICE
+        .get_bypass_game(app_id)
+        .await
+        .map_err(|e| format!("Failed to get bypass game data: {}", e))?;
+
+    let bypass_game = bypass_game.ok_or_else(|| {
+        format!("No bypass data found for game ID: {}", app_id)
+    })?;
+
+    if bypass_game.bypasses.is_empty() {
+        return Err(format!("No bypass URLs found for game: {}", bypass_game.name));
+    }
+
+    println!("🎯 Found {} bypass URLs for game: {}", bypass_game.bypasses.len(), bypass_game.name);
 
     let mut all_errors = Vec::new();
 
-    // Try each source with type-specific naming
-    for (source_index, source) in BYPASS_SOURCES.iter().enumerate() {
-        println!("🔄 Trying source {} of {}: {}", source_index + 1, BYPASS_SOURCES.len(), source);
-        
-        // Generate URL based on bypass type
-        let bypass_url = match bypass_type {
-            Some(type_num) => format!("{}/{}_{}.zip", source, app_id, type_num),
-            None => {
-                // Auto-detect: try to find the first available bypass type
-                let available_bypasses = detect_available_bypass_types(app_id).await;
-                if let Some(first_bypass) = available_bypasses.first() {
-                    if first_bypass.file_suffix == 0 {
-                        format!("{}/{}.zip", source, app_id) // Legacy format
-                    } else {
-                        format!("{}/{}_{}.zip", source, app_id, first_bypass.file_suffix)
-                    }
-                } else {
-                    format!("{}/{}.zip", source, app_id) // Fallback to legacy format
-                }
-            }
-        };
-        
-        println!("📥 Downloading from: {}", bypass_url);
+    // Try each bypass URL from JSON
+    for (index, bypass) in bypass_game.bypasses.iter().enumerate() {
+        println!("🔄 Trying bypass {} of {}: {}", index + 1, bypass_game.bypasses.len(), bypass.url);
 
-        match download_bypass_with_progress(&bypass_url, window, app_id).await {
+        match download_bypass_with_progress(&bypass.url, window, app_id).await {
             Ok(path) => {
-                println!("✅ Download successful from source: {}", source);
+                println!("✅ Download successful from bypass URL: {}", bypass.url);
                 return Ok(path);
             }
             Err(e) => {
-                let error_msg = format!("Source {} failed: {}", source, e);
+                let error_msg = format!("Bypass URL {} failed: {}", bypass.url, e);
                 println!("❌ {}", error_msg);
                 all_errors.push(error_msg);
 
-                // Wait a bit before trying next source (except for last source)
-                if source_index < BYPASS_SOURCES.len() - 1 {
-                    println!("⏳ Waiting 2 seconds before trying next source...");
+                // Wait a bit before trying next URL (except for last URL)
+                if index < bypass_game.bypasses.len() - 1 {
+                    println!("⏳ Waiting 2 seconds before trying next URL...");
                     tokio::time::sleep(Duration::from_secs(2)).await;
                 }
             }
@@ -1006,8 +580,9 @@ async fn download_bypass_from_multiple_sources(
 
     let combined_errors = all_errors.join("; ");
     Err(format!(
-        "Download failed from all {} sources. Errors: {}",
-        BYPASS_SOURCES.len(),
+        "Download failed from all {} bypass URLs for game {}. Errors: {}",
+        bypass_game.bypasses.len(),
+        bypass_game.name,
         combined_errors
     ))
 }
@@ -1164,842 +739,118 @@ async fn extract_bypass(zip_path: &str) -> Result<String, String> {
     Ok(extract_dir.to_string_lossy().to_string())
 }
 
-async fn install_bypass_files(extract_path: &str, game_path: &str) -> Result<(), String> {
-    install_bypass_files_with_type(extract_path, game_path, None).await
-}
-
-async fn install_bypass_files_with_type(extract_path: &str, game_path: &str, bypass_type: Option<u8>) -> Result<(), String> {
-    println!("🔧 Installing bypass files");
+// UNIVERSAL BYPASS INSTALLATION - Pure copy structure as-is from ZIP
+async fn install_bypass_files_universal(extract_path: &str, game_path: &str) -> Result<(), String> {
+    println!("🔧 Installing bypass files - UNIVERSAL METHOD");
     println!("   Source: {}", extract_path);
     println!("   Target: {}", game_path);
-    if let Some(type_num) = bypass_type {
-        println!("   Type: {}", type_num);
-    }
+    println!("   Method: Pure copy structure (no modification)");
 
-    // Find the actual bypass files - they might be in a subfolder
-    let bypass_source = find_bypass_files_directory(extract_path)?;
-    println!("🎯 Bypass files found in: {}", bypass_source);
-
-    // Install based on bypass type
-    match bypass_type {
-        Some(1) => {
-            println!("📁 Installing Type 1: Files only - flat copy to root");
-            copy_bypass_files_flat_impl(Path::new(&bypass_source), Path::new(game_path))
-        },
-        Some(2) => {
-            println!("📁 Installing Type 2: Folders and files - preserve structure");
-            copy_bypass_files_preserve_structure(Path::new(&bypass_source), Path::new(game_path))
-        },
-        Some(3) => {
-            println!("📁 Installing Type 3: Advanced mixed content");
-            copy_bypass_files_hybrid(Path::new(&bypass_source), Path::new(game_path))
-        },
-        Some(4) => {
-            println!("📁 Installing Type 4: Custom installation method");
-            install_bypass_type_4(&bypass_source, game_path).await
-        },
-        Some(5) => {
-            println!("📁 Installing Type 5: Registry/config based");
-            install_bypass_type_5(&bypass_source, game_path).await
-        },
-        _ => {
-            // Auto-detect or legacy mode
-            println!("📁 Auto-detecting installation method...");
-            copy_bypass_files_smart(&bypass_source, game_path)
-        }
-    }?;
-    
-    println!("✅ Bypass files installed successfully");
-    Ok(())
-}
-
-async fn install_bypass_files_with_type_progress(
-    extract_path: &str, 
-    game_path: &str, 
-    bypass_type: Option<u8>,
-    window: &tauri::Window,
-    app_id: &str
-) -> Result<(), String> {
-    println!("🔧 Installing bypass files");
-    println!("   Source: {}", extract_path);
-    println!("   Target: {}", game_path);
-    if let Some(type_num) = bypass_type {
-        println!("   Type: {}", type_num);
-    }
-
-    // Find the actual bypass files - they might be in a subfolder
-    let bypass_source = find_bypass_files_directory(extract_path)?;
-    println!("🎯 Bypass files found in: {}", bypass_source);
-
-    // Install based on bypass type with progress tracking
-    match bypass_type {
-        Some(1) => {
-            println!("📁 Installing Type 1: Files only - flat copy to root");
-            copy_bypass_files_flat_impl_progress(Path::new(&bypass_source), Path::new(game_path), window, app_id).await
-        },
-        Some(2) => {
-            println!("📁 Installing Type 2: Folders and files - preserve structure");
-            copy_bypass_files_preserve_structure_progress(Path::new(&bypass_source), Path::new(game_path), window, app_id).await
-        },
-        Some(3) => {
-            println!("📁 Installing Type 3: Advanced mixed content");
-            copy_bypass_files_hybrid_progress(Path::new(&bypass_source), Path::new(game_path), window, app_id).await
-        },
-        Some(4) => {
-            println!("📁 Installing Type 4: Custom installation method");
-            install_bypass_type_4(&bypass_source, game_path).await
-        },
-        Some(5) => {
-            println!("📁 Installing Type 5: Registry/config based");
-            install_bypass_type_5(&bypass_source, game_path).await
-        },
-        _ => {
-            // Auto-detect or legacy mode
-            println!("📁 Auto-detecting installation method...");
-            copy_bypass_files_smart_progress(&bypass_source, game_path, window, app_id).await
-        }
-    }?;
-    
-    println!("✅ Bypass files installed successfully");
-    Ok(())
-}
-
-// Placeholder implementations for future bypass types
-async fn install_bypass_type_4(extract_path: &str, game_path: &str) -> Result<(), String> {
-    println!("🔧 Type 4 installation: Custom method");
-    // TODO: Implement custom installation logic
-    // For now, fallback to hybrid approach
-    copy_bypass_files_hybrid(Path::new(extract_path), Path::new(game_path))
-}
-
-async fn install_bypass_type_5(extract_path: &str, game_path: &str) -> Result<(), String> {
-    println!("🔧 Type 5 installation: Registry/config based");
-    // TODO: Implement registry/config modification logic
-    // For now, fallback to preserve structure
-    copy_bypass_files_preserve_structure(Path::new(extract_path), Path::new(game_path))
-}
-
-// Progress-enabled file copying functions
-async fn copy_bypass_files_flat_impl_progress(src_path: &Path, dst_path: &Path, window: &tauri::Window, app_id: &str) -> Result<(), String> {
-    let mut files_replaced = 0;
-    let mut files_new = 0;
-    let mut total_files = 0;
-    let mut processed_files = 0;
-
-    println!("📂 Installing bypass files from: {}", src_path.display());
-    println!("📂 Target directory: {}", dst_path.display());
-
-    // First pass: count total files
-    for entry in WalkDir::new(src_path) {
-        let entry = entry.map_err(|e| e.to_string())?;
-        if entry.path().is_file() {
-            total_files += 1;
-        }
-    }
-
-    // Second pass: copy files with progress
-    for entry in WalkDir::new(src_path) {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let path = entry.path();
-
-        if path.is_file() {
-            // Get just the filename (no folder structure)
-            let file_name = match path.file_name() {
-                Some(name) => name,
-                None => continue,
-            };
-
-            // Destination is directly in game root directory
-            let dest_file = dst_path.join(file_name);
-
-            println!("📄 Installing: {}", file_name.to_string_lossy());
-
-            let file_exists = dest_file.exists();
-
-            // Copy the file directly to game root (this will overwrite existing files)
-            fs::copy(path, &dest_file).map_err(|e| e.to_string())?;
-
-            if file_exists {
-                println!("   🔄 REPLACED existing file");
-                files_replaced += 1;
-            } else {
-                println!("   ✅ Added new file");
-                files_new += 1;
-            }
-
-            processed_files += 1;
-
-            // Update progress (75% to 95%)
-            let progress = 75.0 + (processed_files as f64 / total_files as f64) * 20.0;
-            let _ = window.emit(
-                "bypass_progress",
-                BypassProgress {
-                    step: format!("Installing files... {} / {} ({} replaced, {} new)", 
-                                processed_files, total_files, files_replaced, files_new),
-                    progress,
-                    app_id: app_id.to_string(),
-                },
-            );
-        }
-    }
-
-    println!("📊 Installation Summary:");
-    println!("   🔄 Files replaced: {}", files_replaced);
-    println!("   ✅ New files added: {}", files_new);
-
-    Ok(())
-}
-
-async fn copy_bypass_files_preserve_structure_progress(src_path: &Path, dst_path: &Path, window: &tauri::Window, app_id: &str) -> Result<(), String> {
-    let mut files_replaced = 0;
-    let mut files_new = 0;
-    let mut folders_created = 0;
-    let mut total_files = 0;
-    let mut processed_files = 0;
-
-    println!("📂 Installing bypass files with preserved structure");
-    println!("   Source: {}", src_path.display());
-    println!("   Target: {}", dst_path.display());
-
-    // First pass: count total files
-    for entry in WalkDir::new(src_path) {
-        let entry = entry.map_err(|e| e.to_string())?;
-        if entry.path().is_file() {
-            total_files += 1;
-        }
-    }
-
-    // Second pass: copy with progress
-    for entry in WalkDir::new(src_path) {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let src_file_path = entry.path();
-        
-        // Calculate relative path from source root
-        let relative_path = src_file_path.strip_prefix(src_path)
-            .map_err(|e| e.to_string())?;
-        
-        // Skip the root directory itself
-        if relative_path.as_os_str().is_empty() {
-            continue;
-        }
-        
-        let dest_path = dst_path.join(relative_path);
-        
-        if src_file_path.is_dir() {
-            // Create directory if it doesn't exist
-            if !dest_path.exists() {
-                fs::create_dir_all(&dest_path).map_err(|e| e.to_string())?;
-                println!("📁 Created folder: {}", relative_path.display());
-                folders_created += 1;
-            }
-        } else if src_file_path.is_file() {
-            // Ensure parent directory exists
-            if let Some(parent) = dest_path.parent() {
-                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-            }
-            
-            let file_exists = dest_path.exists();
-            
-            // Copy the file
-            fs::copy(src_file_path, &dest_path).map_err(|e| e.to_string())?;
-            
-            println!("📄 Installing: {}", relative_path.display());
-            
-            if file_exists {
-                println!("   🔄 REPLACED existing file");
-                files_replaced += 1;
-            } else {
-                println!("   ✅ Added new file");
-                files_new += 1;
-            }
-
-            processed_files += 1;
-
-            // Update progress (75% to 95%)
-            let progress = 75.0 + (processed_files as f64 / total_files as f64) * 20.0;
-            let _ = window.emit(
-                "bypass_progress",
-                BypassProgress {
-                    step: format!("Installing files... {} / {} ({} folders, {} replaced, {} new)", 
-                                processed_files, total_files, folders_created, files_replaced, files_new),
-                    progress,
-                    app_id: app_id.to_string(),
-                },
-            );
-        }
-    }
-
-    println!("📊 Installation Summary:");
-    println!("   📁 Folders created: {}", folders_created);
-    println!("   🔄 Files replaced: {}", files_replaced);
-    println!("   ✅ New files added: {}", files_new);
-
-    Ok(())
-}
-
-async fn copy_bypass_files_hybrid_progress(src_path: &Path, dst_path: &Path, window: &tauri::Window, app_id: &str) -> Result<(), String> {
-    let mut files_replaced = 0;
-    let mut files_new = 0;
-    let mut folders_created = 0;
-    let mut total_files = 0;
-    let mut processed_files = 0;
-
-    println!("📂 Installing bypass files with hybrid approach");
-    println!("   Source: {}", src_path.display());
-    println!("   Target: {}", dst_path.display());
-    
-    // First pass: count total files
-    for entry in WalkDir::new(src_path) {
-        let entry = entry.map_err(|e| e.to_string())?;
-        if entry.path().is_file() {
-            total_files += 1;
-        }
-    }
-
-    // Phase 1: Copy root files to game root (75-85%)
-    let _ = window.emit(
-        "bypass_progress",
-        BypassProgress {
-            step: "Phase 1: Installing root files to game directory".to_string(),
-            progress: 75.0,
-            app_id: app_id.to_string(),
-        },
-    );
-
-    let mut root_files_processed = 0;
-    let mut root_files_total = 0;
-
-    // Count root files first
-    if let Ok(entries) = fs::read_dir(src_path) {
-        for entry in entries {
-            if let Ok(entry) = entry {
-                if entry.path().is_file() {
-                    root_files_total += 1;
-                }
-            }
-        }
-    }
-
-    // Copy root files to game directory
-    if let Ok(entries) = fs::read_dir(src_path) {
-        for entry in entries {
-            if let Ok(entry) = entry {
-                let src_file = entry.path();
-                if src_file.is_file() {
-                    if let Some(file_name) = src_file.file_name() {
-                        let dest_file = dst_path.join(file_name);
-                        let file_exists = dest_file.exists();
-                        
-                        fs::copy(&src_file, &dest_file).map_err(|e| e.to_string())?;
-                        
-                        println!("📄 Root file: {}", file_name.to_string_lossy());
-                        
-                        if file_exists {
-                            println!("   🔄 REPLACED existing file");
-                            files_replaced += 1;
-                        } else {
-                            println!("   ✅ Added new file");
-                            files_new += 1;
-                        }
-
-                        root_files_processed += 1;
-                        processed_files += 1;
-
-                        // Update progress for root files
-                        let phase1_progress = if root_files_total > 0 {
-                            75.0 + (root_files_processed as f64 / root_files_total as f64) * 10.0
-                        } else {
-                            80.0
-                        };
-
-                        let _ = window.emit(
-                            "bypass_progress",
-                            BypassProgress {
-                                step: format!("Installing root files... {} / {} total", processed_files, total_files),
-                                progress: phase1_progress,
-                                app_id: app_id.to_string(),
-                            },
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    // Phase 2: Copy subdirectories with structure preservation (85-95%)
-    let _ = window.emit(
-        "bypass_progress",
-        BypassProgress {
-            step: "Phase 2: Installing subdirectories with structure".to_string(),
-            progress: 85.0,
-            app_id: app_id.to_string(),
-        },
-    );
-
-    for entry in WalkDir::new(src_path).min_depth(2) { // Skip root and immediate children
-        let entry = entry.map_err(|e| e.to_string())?;
-        let src_file_path = entry.path();
-        
-        let relative_path = src_file_path.strip_prefix(src_path)
-            .map_err(|e| e.to_string())?;
-        
-        let dest_path = dst_path.join(relative_path);
-        
-        if src_file_path.is_dir() {
-            if !dest_path.exists() {
-                fs::create_dir_all(&dest_path).map_err(|e| e.to_string())?;
-                println!("📁 Created folder: {}", relative_path.display());
-                folders_created += 1;
-            }
-        } else if src_file_path.is_file() {
-            if let Some(parent) = dest_path.parent() {
-                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-            }
-            
-            let file_exists = dest_path.exists();
-            fs::copy(src_file_path, &dest_path).map_err(|e| e.to_string())?;
-            
-            println!("📄 Subfolder file: {}", relative_path.display());
-            
-            if file_exists {
-                println!("   🔄 REPLACED existing file");
-                files_replaced += 1;
-            } else {
-                println!("   ✅ Added new file");
-                files_new += 1;
-            }
-
-            processed_files += 1;
-
-            // Update progress for subdirectory files
-            let remaining_files = total_files - root_files_processed;
-            let phase2_progress = if remaining_files > 0 {
-                85.0 + ((processed_files - root_files_processed) as f64 / remaining_files as f64) * 10.0
-            } else {
-                95.0
-            };
-            let _ = window.emit(
-                "bypass_progress",
-                BypassProgress {
-                    step: format!("Installing subdirectory files... {} / {} total", processed_files, total_files),
-                    progress: phase2_progress,
-                    app_id: app_id.to_string(),
-                },
-            );
-        }
-    }
-
-    println!("📊 Installation Summary:");
-    println!("   📁 Folders created: {}", folders_created);
-    println!("   🔄 Files replaced: {}", files_replaced);
-    println!("   ✅ New files added: {}", files_new);
-
-    Ok(())
-}
-
-async fn copy_bypass_files_smart_progress(src: &str, dst: &str, window: &tauri::Window, app_id: &str) -> Result<(), String> {
-    let src_path = Path::new(src);
-    let dst_path = Path::new(dst);
-
-    println!("🔧 Analyzing bypass structure...");
-    
-    let _ = window.emit(
-        "bypass_progress",
-        BypassProgress {
-            step: "Analyzing bypass structure...".to_string(),
-            progress: 75.0,
-            app_id: app_id.to_string(),
-        },
-    );
-    
-    // Analyze the bypass structure to determine the best copy strategy
-    let structure_analysis = analyze_bypass_structure(src_path)?;
-    
-    match structure_analysis {
-        BypassStructure::FlatFiles => {
-            println!("📁 Structure: Flat files - copying directly to game root");
-            copy_bypass_files_flat_impl_progress(src_path, dst_path, window, app_id).await
-        },
-        BypassStructure::FoldersWithContent => {
-            println!("📁 Structure: Contains folders - preserving directory structure");
-            copy_bypass_files_preserve_structure_progress(src_path, dst_path, window, app_id).await
-        },
-        BypassStructure::MixedContent => {
-            println!("📁 Structure: Mixed content - using hybrid approach");
-            copy_bypass_files_hybrid_progress(src_path, dst_path, window, app_id).await
-        }
-    }
-}
-
-fn find_bypass_files_directory(extract_path: &str) -> Result<String, String> {
     let extract_dir = Path::new(extract_path);
+    let game_dir = Path::new(game_path);
 
-    // First, check if there are executable files directly in extract path
-    let mut has_exe_files = false;
-    let mut has_dll_files = false;
-
-    if let Ok(entries) = fs::read_dir(extract_dir) {
-        for entry in entries.filter_map(Result::ok) {
-            if let Some(ext) = entry.path().extension() {
-                let ext_str = ext.to_string_lossy().to_lowercase();
-                if ext_str == "exe" {
-                    has_exe_files = true;
-                }
-                if ext_str == "dll" {
-                    has_dll_files = true;
-                }
-            }
-        }
+    if !extract_dir.exists() {
+        return Err("Extract directory does not exist".to_string());
     }
 
-    // If we have bypass files directly in extract path, use it
-    if has_exe_files || has_dll_files {
-        println!("📁 Bypass files found directly in extract directory");
-        return Ok(extract_path.to_string());
+    if !game_dir.exists() {
+        return Err("Game directory does not exist".to_string());
     }
 
-    // Otherwise, look for subfolder containing bypass files
-    println!("🔍 Searching for bypass files in subfolders...");
-
-    for entry in WalkDir::new(extract_dir).max_depth(2) {
-        if let Ok(entry) = entry {
-            let path = entry.path();
-            if path.is_dir() && path != extract_dir {
-                // Check if this directory contains bypass files
-                let mut exe_count = 0;
-                let mut dll_count = 0;
-
-                if let Ok(sub_entries) = fs::read_dir(path) {
-                    for sub_entry in sub_entries.filter_map(Result::ok) {
-                        if let Some(ext) = sub_entry.path().extension() {
-                            let ext_str = ext.to_string_lossy().to_lowercase();
-                            if ext_str == "exe" {
-                                exe_count += 1;
-                            }
-                            if ext_str == "dll" {
-                                dll_count += 1;
-                            }
-                        }
-                    }
-                }
-
-                // If this folder has multiple bypass files, it's likely the right one
-                if exe_count > 0 || dll_count > 2 {
-                    println!("📁 Found bypass files in subfolder: {}", path.display());
-                    println!(
-                        "   Contains: {} exe files, {} dll files",
-                        exe_count, dll_count
-                    );
-                    return Ok(path.to_string_lossy().to_string());
+    // Copy everything from extract directory to game directory - preserve structure exactly
+    copy_dir_contents_recursive(extract_dir, game_dir)?;
+    
+    // Check if note.txt or note file was installed and log it
+    let note_txt_path = format!("{}/note.txt", game_path);
+    let note_path = format!("{}/note", game_path);
+    
+    if Path::new(&note_txt_path).exists() {
+        println!("📝 Note file detected: note.txt");
+        if let Ok(content) = fs::read_to_string(&note_txt_path) {
+            let trimmed = content.trim();
+            if !trimmed.is_empty() {
+                println!("📋 Note content: {}", trimmed);
+                if let Some(exe_name) = extract_recommended_exe(trimmed) {
+                    println!("🎯 Recommended executable: {}", exe_name);
                 }
             }
         }
-    }
-
-    // Fallback to original extract path
-    println!("⚠️  Using original extract path as fallback");
-    Ok(extract_path.to_string())
-}
-
-fn copy_bypass_files_smart(src: &str, dst: &str) -> Result<(), String> {
-    let src_path = Path::new(src);
-    let dst_path = Path::new(dst);
-
-    println!("🔧 Analyzing bypass structure...");
-    
-    // Analyze the bypass structure to determine the best copy strategy
-    let structure_analysis = analyze_bypass_structure(src_path)?;
-    
-    match structure_analysis {
-        BypassStructure::FlatFiles => {
-            println!("📁 Structure: Flat files - copying directly to game root");
-            copy_bypass_files_flat_impl(src_path, dst_path)
-        },
-        BypassStructure::FoldersWithContent => {
-            println!("📁 Structure: Contains folders - preserving directory structure");
-            copy_bypass_files_preserve_structure(src_path, dst_path)
-        },
-        BypassStructure::MixedContent => {
-            println!("📁 Structure: Mixed content - using hybrid approach");
-            copy_bypass_files_hybrid(src_path, dst_path)
-        }
-    }
-}
-
-fn analyze_bypass_structure(src_path: &Path) -> Result<BypassStructure, String> {
-    let mut root_files = 0;
-    let mut folders_with_content = 0;
-    let mut total_files_in_subfolders = 0;
-    
-    println!("🔍 Analyzing directory structure: {}", src_path.display());
-    
-    // Read root directory
-    if let Ok(entries) = fs::read_dir(src_path) {
-        for entry in entries.filter_map(Result::ok) {
-            let path = entry.path();
-            
-            if path.is_file() {
-                root_files += 1;
-                println!("   📄 Root file: {}", path.file_name().unwrap().to_string_lossy());
-            } else if path.is_dir() {
-                // Check if folder has meaningful content
-                let folder_name = path.file_name().unwrap().to_string_lossy();
-                let files_in_folder = count_files_in_directory(&path)?;
-                
-                if files_in_folder > 0 {
-                    folders_with_content += 1;
-                    total_files_in_subfolders += files_in_folder;
-                    println!("   📁 Folder '{}' contains {} files", folder_name, files_in_folder);
+    } else if Path::new(&note_path).exists() {
+        println!("📝 Note file detected: note");
+        if let Ok(content) = fs::read_to_string(&note_path) {
+            let trimmed = content.trim();
+            if !trimmed.is_empty() {
+                println!("📋 Note content: {}", trimmed);
+                if let Some(exe_name) = extract_recommended_exe(trimmed) {
+                    println!("🎯 Recommended executable: {}", exe_name);
                 }
             }
         }
-    }
-    
-    println!("📊 Structure analysis:");
-    println!("   📄 Root files: {}", root_files);
-    println!("   📁 Folders with content: {}", folders_with_content);
-    println!("   📋 Files in subfolders: {}", total_files_in_subfolders);
-    
-    // Determine structure type
-    let structure = if folders_with_content == 0 {
-        BypassStructure::FlatFiles
-    } else if root_files == 0 && folders_with_content > 0 {
-        BypassStructure::FoldersWithContent
-    } else {
-        BypassStructure::MixedContent
-    };
-    
-    println!("🎯 Detected structure: {:?}", structure);
-    Ok(structure)
-}
-
-fn count_files_in_directory(dir_path: &Path) -> Result<usize, String> {
-    let mut count = 0;
-    for entry in WalkDir::new(dir_path) {
-        let entry = entry.map_err(|e| e.to_string())?;
-        if entry.path().is_file() {
-            count += 1;
-        }
-    }
-    Ok(count)
-}
-
-fn copy_bypass_files_preserve_structure(src_path: &Path, dst_path: &Path) -> Result<(), String> {
-    let mut files_replaced = 0;
-    let mut files_new = 0;
-    let mut folders_created = 0;
-
-    println!("📂 Installing bypass files with preserved structure");
-    println!("   Source: {}", src_path.display());
-    println!("   Target: {}", dst_path.display());
-
-    for entry in WalkDir::new(src_path) {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let src_file_path = entry.path();
-        
-        // Calculate relative path from source root
-        let relative_path = src_file_path.strip_prefix(src_path)
-            .map_err(|e| e.to_string())?;
-        
-        // Skip the root directory itself
-        if relative_path.as_os_str().is_empty() {
-            continue;
-        }
-        
-        let dest_path = dst_path.join(relative_path);
-        
-        if src_file_path.is_dir() {
-            // Create directory if it doesn't exist
-            if !dest_path.exists() {
-                fs::create_dir_all(&dest_path).map_err(|e| e.to_string())?;
-                println!("📁 Created folder: {}", relative_path.display());
-                folders_created += 1;
-            }
-        } else if src_file_path.is_file() {
-            // Ensure parent directory exists
-            if let Some(parent) = dest_path.parent() {
-                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-            }
-            
-            let file_exists = dest_path.exists();
-            
-            // Copy the file
-            fs::copy(src_file_path, &dest_path).map_err(|e| e.to_string())?;
-            
-            println!("📄 Installing: {}", relative_path.display());
-            
-            if file_exists {
-                println!("   🔄 REPLACED existing file");
-                files_replaced += 1;
             } else {
-                println!("   ✅ Added new file");
-                files_new += 1;
-            }
-        }
+        println!("📝 No note file found in bypass");
     }
-
-    println!("📊 Installation Summary:");
-    println!("   📁 Folders created: {}", folders_created);
-    println!("   🔄 Files replaced: {}", files_replaced);
-    println!("   ✅ New files added: {}", files_new);
-
+    
+    println!("✅ Bypass files installed successfully with UNIVERSAL method");
     Ok(())
 }
 
-fn copy_bypass_files_hybrid(src_path: &Path, dst_path: &Path) -> Result<(), String> {
-    let mut files_replaced = 0;
-    let mut files_new = 0;
-    let mut folders_created = 0;
+// Copy directory contents with preserved structure - exactly as extracted from ZIP
+fn copy_dir_contents_recursive(src: &Path, dst: &Path) -> Result<(), String> {
+    println!("📂 Copying contents from: {}", src.display());
+    println!("📂 Copying contents to: {}", dst.display());
+    println!("📝 Method: PRESERVE STRUCTURE - Copy all folders and files as-is");
 
-    println!("📂 Installing bypass files with hybrid approach");
-    println!("   Source: {}", src_path.display());
-    println!("   Target: {}", dst_path.display());
-    
-    // First, copy root files directly to game root
-    println!("🔧 Phase 1: Installing root files to game directory");
-    if let Ok(entries) = fs::read_dir(src_path) {
-        for entry in entries.filter_map(Result::ok) {
-            let path = entry.path();
-            if path.is_file() {
-                let file_name = path.file_name().unwrap();
-                let dest_file = dst_path.join(file_name);
-                
-                let file_exists = dest_file.exists();
-                fs::copy(&path, &dest_file).map_err(|e| e.to_string())?;
-                
-                println!("📄 Installing root file: {}", file_name.to_string_lossy());
-                if file_exists {
-                    println!("   🔄 REPLACED existing file");
-                    files_replaced += 1;
-                } else {
-                    println!("   ✅ Added new file");
-                    files_new += 1;
-                }
-            }
-        }
-    }
-    
-    // Then, copy ONLY folders (not individual files) with structure preserved
-    println!("🔧 Phase 2: Installing folders with preserved structure");
-    if let Ok(entries) = fs::read_dir(src_path) {
-        for entry in entries.filter_map(Result::ok) {
-            let path = entry.path();
-            if path.is_dir() {
-                let folder_name = path.file_name().unwrap();
-                println!("📁 Processing folder: {}", folder_name.to_string_lossy());
-                
-                // Copy this folder and its contents recursively
-                copy_folder_recursive(&path, &dst_path.join(folder_name), &mut files_replaced, &mut files_new, &mut folders_created)?;
-            }
-        }
-    }
-    
-    println!("📊 Hybrid Installation Summary:");
-    println!("   📁 Folders created: {}", folders_created);
-    println!("   🔄 Files replaced: {}", files_replaced);
-    println!("   ✅ New files added: {}", files_new);
-    Ok(())
-}
+    let mut files_copied = 0;
+    let mut dirs_created = 0;
 
-fn copy_folder_recursive(src_folder: &Path, dst_folder: &Path, files_replaced: &mut usize, files_new: &mut usize, folders_created: &mut usize) -> Result<(), String> {
-    // Create destination folder if it doesn't exist
-    if !dst_folder.exists() {
-        fs::create_dir_all(dst_folder).map_err(|e| e.to_string())?;
-        println!("   📁 Created folder: {}", dst_folder.display());
-        *folders_created += 1;
-    }
-    
-    // Copy all contents of this folder
-    for entry in WalkDir::new(src_folder) {
-        let entry = entry.map_err(|e| e.to_string())?;
+    // Walk through ALL contents in the source directory
+    for entry in WalkDir::new(src) {
+        let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
         let src_path = entry.path();
         
-        // Skip the root folder itself
-        if src_path == src_folder {
+        // Skip the root source directory itself
+        if src_path == src {
             continue;
         }
         
-        // Calculate relative path from src_folder
-        let relative_path = src_path.strip_prefix(src_folder)
-            .map_err(|e| e.to_string())?;
-        let dest_path = dst_folder.join(relative_path);
+        // Calculate relative path from source
+        let relative_path = src_path.strip_prefix(src)
+            .map_err(|e| format!("Failed to get relative path: {}", e))?;
         
+        let dst_path = dst.join(relative_path);
+
         if src_path.is_dir() {
-            // Create directory
-            if !dest_path.exists() {
-                fs::create_dir_all(&dest_path).map_err(|e| e.to_string())?;
-                println!("   📁 Created subfolder: {}", relative_path.display());
-                *folders_created += 1;
+            // Create directory if it doesn't exist
+            if !dst_path.exists() {
+                fs::create_dir_all(&dst_path)
+                    .map_err(|e| format!("Failed to create directory {}: {}", dst_path.display(), e))?;
+                dirs_created += 1;
+                println!("📁 Created directory: {}", relative_path.display());
             }
         } else if src_path.is_file() {
             // Ensure parent directory exists
-            if let Some(parent) = dest_path.parent() {
-                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            if let Some(parent) = dst_path.parent() {
+                if !parent.exists() {
+                    fs::create_dir_all(parent)
+                        .map_err(|e| format!("Failed to create parent directory: {}", e))?;
+                }
             }
+
+            // Copy file with preserved structure
+            fs::copy(src_path, &dst_path)
+                .map_err(|e| format!("Failed to copy file {}: {}", src_path.display(), e))?;
             
-            let file_exists = dest_path.exists();
-            
-            // Copy the file
-            fs::copy(src_path, &dest_path).map_err(|e| e.to_string())?;
-            
-            println!("   📄 Installing: {}", relative_path.display());
-            
-            if file_exists {
-                println!("      🔄 REPLACED existing file");
-                *files_replaced += 1;
-            } else {
-                println!("      ✅ Added new file");
-                *files_new += 1;
-            }
-        }
-    }
-    
-    Ok(())
-}
-
-// Legacy flat copy implementation (kept for compatibility)
-fn copy_bypass_files_flat_impl(src_path: &Path, dst_path: &Path) -> Result<(), String> {
-
-    let mut files_replaced = 0;
-    let mut files_new = 0;
-
-    println!("📂 Installing bypass files from: {}", src_path.display());
-    println!("📂 Target directory: {}", dst_path.display());
-
-    for entry in WalkDir::new(src_path) {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let path = entry.path();
-
-        if path.is_file() {
-            // Get just the filename (no folder structure)
-            let file_name = match path.file_name() {
-                Some(name) => name,
-                None => continue,
-            };
-
-            // Destination is directly in game root directory
-            let dest_file = dst_path.join(file_name);
-
-            println!("📄 Installing: {}", file_name.to_string_lossy());
-
-            let file_exists = dest_file.exists();
-
-            // Copy the file directly to game root (this will overwrite existing files)
-            fs::copy(path, &dest_file).map_err(|e| e.to_string())?;
-
-            if file_exists {
-                println!("   🔄 REPLACED existing file");
-                files_replaced += 1;
-            } else {
-                println!("   ✅ Added new file");
-                files_new += 1;
-            }
+            files_copied += 1;
+            let file_size = src_path.metadata().map(|m| m.len()).unwrap_or(0);
+            println!("📄 Copied file: {} ({:.1} KB)", 
+                    relative_path.display(), 
+                    file_size as f64 / 1024.0);
         }
     }
 
-    println!("📊 Installation Summary:");
-    println!("   🔄 Files replaced: {}", files_replaced);
-    println!("   ✅ New files added: {}", files_new);
+    println!("📊 Structure-preserving copy completed:");
+    println!("   📁 Directories created: {}", dirs_created);
+    println!("   📄 Files copied: {}", files_copied);
 
     Ok(())
 }
@@ -2017,5 +868,3 @@ fn cleanup_temp_files(download_path: &str, extract_path: &str) -> Result<(), Str
     }
     Ok(())
 }
-
-

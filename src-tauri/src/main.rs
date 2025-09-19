@@ -2330,11 +2330,8 @@ fn main() {
             // Bypass Commands
             bypass::install_bypass,
             bypass::install_bypass_with_type,
-            bypass::install_bypass_direct,
             bypass::check_bypass_installed_command,
             bypass::get_game_installation_info,
-            bypass::check_bypass_availability,
-            bypass::get_available_bypass_types,
             bypass::get_game_executables,
             bypass::get_bypass_notes,
             bypass::confirm_and_launch_game,

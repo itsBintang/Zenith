@@ -245,11 +245,9 @@ function Bypass() {
     setBypassProgress({ step: "Installing bypass...", progress: 0, app_id: selectedGame.appId });
 
     try {
-      // Use the new direct bypass installation with static URLs
-      const result = await invoke("install_bypass_direct", { 
-        appId: selectedGame.appId,
-        gameName: selectedGame.name,
-        bypasses: selectedGame.bypasses
+      // Use the universal bypass installation method
+      const result = await invoke("install_bypass", { 
+        appId: selectedGame.appId
       });
 
       console.log("🔍 Bypass installation result:", result);
@@ -268,22 +266,13 @@ function Bypass() {
           }
         }));
 
-        // Show launch popup if game executable found
-        console.log("🔍 Checking launch conditions:");
+        // Don't show launch popup - bypass installation complete
+        console.log("🔍 Bypass installation complete");
         console.log("  - result.should_launch:", result.should_launch);
         console.log("  - result.game_executable_path:", result.game_executable_path);
         
-        if (result.game_executable_path) {
-          console.log("🎮 Game executable path found:", result.game_executable_path);
-          setGameExecutablePath(result.game_executable_path);
-          await loadGameExecutables(result.game_executable_path);
-          console.log("🚀 Setting showLaunchPopup to true");
-          setShowLaunchPopup(true);
-          // Don't reset selectedGame here, keep it for launch popup
-        } else {
-          console.log("❌ No executable path provided");
-          setSelectedGame(null);
-        }
+        // Just finish - no popup needed
+        setSelectedGame(null);
       } else {
         setNotification({
           message: `Bypass installation failed: ${result?.message || 'Unknown error'}`,

@@ -624,43 +624,9 @@ impl SqliteCacheService {
                 data
             }
             Err(e) => {
-                eprintln!("Failed to fetch from GitHub API: {}, falling back to embedded data", e);
-                // Fallback to embedded data if GitHub API fails
-                r#"[
-  {
-    "appId": "1174180",
-    "name": "Red Dead Redemption 2",
-    "image": "https://itsbintang.github.io/cdn/1174180.jpg",
-    "bypasses": [
-      {
-        "type": "1",
-        "url": "https://bypass.nzr.web.id/1174180_1.zip"
-      }
-    ]
-  },
-  {
-    "appId": "1546990",
-    "name": "Grand Theft Auto: Vice City - The Definitive Edition",
-    "image": "https://itsbintang.github.io/cdn/1546990.jpg",
-    "bypasses": [
-      {
-        "type": "3",
-        "url": "http://cdn2.nzr.web.id/1546990_3.zip"
-      }
-    ]
-  },
-  {
-    "appId": "582160",
-    "name": "Assassin's Creed Origins",
-    "image": "https://itsbintang.github.io/cdn/582160.jpg",
-    "bypasses": [
-      {
-        "type": "1",
-        "url": "https://bypass.nzr.web.id/582160_1.zip"
-      }
-    ]
-  }
-]"#.to_string()
+                eprintln!("Failed to fetch from GitHub API: {}", e);
+                // Return error instead of fallback - GitHub API should be the single source of truth
+                return Err(anyhow::anyhow!("Unable to fetch bypass games from GitHub API: {}. Please check your internet connection.", e));
             }
         };
 
@@ -676,9 +642,11 @@ impl SqliteCacheService {
 
         #[derive(serde::Deserialize)]
         struct JsonBypassInfo {
-            #[serde(deserialize_with = "deserialize_type_field")]
-            r#type: u8,
+            // Support both old format (with type) and new universal format (without type)
+            #[serde(deserialize_with = "deserialize_optional_type_field", default)]
+            r#type: Option<u8>,
             url: String,
+            description: Option<String>, // New field for universal format
         }
 
         let json_games: Vec<JsonBypassGame> = serde_json::from_str(&json_data)?;
@@ -687,7 +655,10 @@ impl SqliteCacheService {
         let mut bypass_games = Vec::new();
         for json_game in json_games {
             let bypasses = json_game.bypasses.into_iter()
-                .map(|b| BypassInfo { r#type: b.r#type, url: b.url })
+                .map(|b| BypassInfo { 
+                    r#type: b.r#type.unwrap_or(1), // Default to type 1 for universal format
+                    url: b.url 
+                })
                 .collect();
             
             let bypass_game = BypassGame::new(
@@ -778,43 +749,68 @@ impl SqliteCacheService {
     }
 }
 
-/// Custom deserializer for type field that can handle both string and integer
-fn deserialize_type_field<'de, D>(deserializer: D) -> std::result::Result<u8, D::Error>
+/// Custom deserializer for optional type field that can handle both string and integer
+fn deserialize_optional_type_field<'de, D>(deserializer: D) -> std::result::Result<Option<u8>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     use serde::de::{self, Visitor};
     use std::fmt;
 
-    struct TypeVisitor;
+    struct OptionalTypeVisitor;
 
-    impl<'de> Visitor<'de> for TypeVisitor {
-        type Value = u8;
+    impl<'de> Visitor<'de> for OptionalTypeVisitor {
+        type Value = Option<u8>;
 
         fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-            formatter.write_str("a string or integer representing a type")
+            formatter.write_str("an optional string or integer representing a type")
         }
 
-        fn visit_str<E>(self, value: &str) -> std::result::Result<u8, E>
+        fn visit_none<E>(self) -> std::result::Result<Option<u8>, E>
         where
             E: de::Error,
         {
-            value.parse::<u8>().map_err(de::Error::custom)
+            Ok(None)
         }
 
-        fn visit_u64<E>(self, value: u64) -> std::result::Result<u8, E>
+        fn visit_unit<E>(self) -> std::result::Result<Option<u8>, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_str<E>(self, value: &str) -> std::result::Result<Option<u8>, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(value.parse::<u8>().map_err(de::Error::custom)?))
+        }
+
+        fn visit_u64<E>(self, value: u64) -> std::result::Result<Option<u8>, E>
         where
             E: de::Error,
         {
             if value <= 255 {
-                Ok(value as u8)
+                Ok(Some(value as u8))
             } else {
                 Err(de::Error::custom("type value too large"))
             }
         }
+
+        fn visit_i64<E>(self, value: i64) -> std::result::Result<Option<u8>, E>
+        where
+            E: de::Error,
+        {
+            if value >= 0 && value <= 255 {
+                Ok(Some(value as u8))
+            } else {
+                Err(de::Error::custom("type value out of range"))
+            }
+        }
     }
 
-    deserializer.deserialize_any(TypeVisitor)
+    deserializer.deserialize_any(OptionalTypeVisitor)
 }
 
 /// Result of batch refresh operation
