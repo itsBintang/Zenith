@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
 import { FiHome, FiBox, FiSettings, FiRefreshCw, FiShield } from "react-icons/fi";
 import { invoke } from "@tauri-apps/api/core";
 import logoImage from "../../logo.jpg";
 import MyLibrary from './MyLibrary'; // Assuming MyLibrary is in the same folder
 
-function Sidebar({ active = "home", onNavigate, onGameSelect, onProfileClick, libraryState, onRefreshLibrary, onUpdateFilter, refreshProfileTrigger }) {
+function Sidebar({ libraryState, onRefreshLibrary, onUpdateFilter, refreshProfileTrigger }) {
   const [isRestarting, setIsRestarting] = useState(false);
   const [notification, setNotification] = useState(null);
   const [profile, setProfile] = useState(null);
   const [avatarImage, setAvatarImage] = useState(null);
+  const navigate = useNavigate();
 
   // Load profile data on component mount
   useEffect(() => {
@@ -41,6 +43,14 @@ function Sidebar({ active = "home", onNavigate, onGameSelect, onProfileClick, li
       // Set default profile if loading fails
       setProfile({ name: 'User' });
     }
+  };
+
+  const handleProfileClick = () => {
+    navigate('/profile');
+  };
+
+  const handleGameSelect = (appId) => {
+    navigate(`/game/${appId}`);
   };
 
   const handleRestartSteam = async () => {
@@ -83,7 +93,7 @@ function Sidebar({ active = "home", onNavigate, onGameSelect, onProfileClick, li
     <aside className="ui-sidebar">
       {/* Profile Section */}
       <div className="ui-sidebar__section">
-        <div className="ui-profile" onClick={() => onProfileClick && onProfileClick()}>
+        <div className="ui-profile" onClick={handleProfileClick}>
           <img 
             src={avatarImage || logoImage} 
             alt={profile?.name || 'User'} 
@@ -93,34 +103,37 @@ function Sidebar({ active = "home", onNavigate, onGameSelect, onProfileClick, li
         </div>
       </div>
 
-      {/* Main Navigation */}
-      <nav className="ui-sidebar__nav">
-        <a className={`ui-nav-item ${active === "home" ? "ui-nav-item--active" : ""}`} onClick={() => onNavigate && onNavigate("home")}>
-          <FiHome size={18} />
-          <span>Home</span>
-        </a>
-        <a className={`ui-nav-item ${active === "catalogue" ? "ui-nav-item--active" : ""}`} onClick={() => onNavigate && onNavigate("catalogue")}>
-          <FiBox size={18} />
-          <span>Catalogue</span>
-        </a>
-        <a className={`ui-nav-item ${active === "bypass" ? "ui-nav-item--active" : ""}`} onClick={() => onNavigate && onNavigate("bypass")}>
-          <FiShield size={18} />
-          <span>Bypass</span>
-        </a>
-        <a className={`ui-nav-item ${active === "settings" ? "ui-nav-item--active" : ""}`} onClick={() => onNavigate && onNavigate("settings")}>
-          <FiSettings size={18} />
-          <span>Settings</span>
-        </a>
-      </nav>
+      {/* Scrollable Area */}
+      <div className="ui-sidebar__scroll-area">
+        {/* Main Navigation */}
+        <nav className="ui-sidebar__nav">
+          <NavLink to="/" className={({ isActive }) => `ui-nav-item ${isActive ? "ui-nav-item--active" : ""}`} end>
+            <FiHome size={18} />
+            <span>Home</span>
+          </NavLink>
+          <NavLink to="/catalogue" className={({ isActive }) => `ui-nav-item ${isActive ? "ui-nav-item--active" : ""}`}>
+            <FiBox size={18} />
+            <span>Catalogue</span>
+          </NavLink>
+          <NavLink to="/bypass" className={({ isActive }) => `ui-nav-item ${isActive ? "ui-nav-item--active" : ""}`}>
+            <FiShield size={18} />
+            <span>Bypass</span>
+          </NavLink>
+          <NavLink to="/settings" className={({ isActive }) => `ui-nav-item ${isActive ? "ui-nav-item--active" : ""}`}>
+            <FiSettings size={18} />
+            <span>Settings</span>
+          </NavLink>
+        </nav>
 
-      {/* My Library Section */}
-      <div className="ui-sidebar__library-container">
-        <MyLibrary 
-          onGameSelect={onGameSelect}
-          libraryState={libraryState}
-          onRefreshLibrary={onRefreshLibrary}
-          onUpdateFilter={onUpdateFilter}
-        />
+        {/* My Library Section */}
+        <div className="ui-sidebar__library-container">
+          <MyLibrary 
+            onGameSelect={handleGameSelect}
+            libraryState={libraryState}
+            onRefreshLibrary={onRefreshLibrary}
+            onUpdateFilter={onUpdateFilter}
+          />
+        </div>
       </div>
       
       {/* Steam Control Section - Always at bottom */}

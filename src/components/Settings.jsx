@@ -76,9 +76,7 @@ function Settings() {
 
   return (
     <div className="ui-page">
-      <div className="ui-subheader">
-        <div className="ui-header__title">Settings</div>
-      </div>
+      {/* The subheader is removed as the main Header component will handle titles */}
       <div className="ui-content">
         <div className="settings-section">
           <div className="settings-field">

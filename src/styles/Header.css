@@ -1,0 +1,76 @@
+/* Header.css */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 24px;
+  height: 60px;
+  background-color: var(--hydra-bg-dark);
+  border-bottom: 1px solid var(--hydra-border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  user-select: none;
+}
+
+.header__section {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header__back-button {
+  background: none;
+  border: none;
+  color: var(--hydra-text-body);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.5;
+  transition: background-color 0.2s, opacity 0.2s;
+}
+
+.header__back-button--enabled {
+  opacity: 1;
+}
+
+.header__back-button:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.header__back-button:disabled {
+  cursor: not-allowed;
+}
+
+.header__title {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--hydra-text-muted);
+  margin: 0;
+}
+
+.header__search {
+  display: flex;
+  align-items: center;
+  background-color: var(--hydra-bg);
+  border: 1px solid var(--hydra-border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  color: var(--hydra-text-body);
+}
+
+.header__search input {
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--hydra-text-muted);
+  margin-left: 8px;
+  font-size: 14px;
+}
+
+.header__search input::placeholder {
+  color: var(--hydra-text-body);
+}

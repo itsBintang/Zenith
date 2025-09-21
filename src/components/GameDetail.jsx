@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { FiArrowLeft, FiCloud, FiDownload, FiPlay, FiSettings, FiCheck, FiX, FiTrash2, FiPackage, FiRefreshCw } from "react-icons/fi";
@@ -175,7 +176,8 @@ function GallerySlider({ screenshots }) {
   );
 }
 
-function GameDetail({ appId, onBack, showBackButton = true }) {
+function GameDetail() {
+  const { appId } = useParams(); // Get appId from URL
   const [detail, setDetail] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("minimum");
@@ -207,6 +209,11 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
       
       try {
         setIsLoading(true);
+        if (!appId) {
+            console.error("No App ID provided in URL");
+            setIsLoading(false);
+            return;
+        }
         const d = await invoke("get_game_details", { appId });
         if (mounted) {
           setDetail(d);
@@ -454,14 +461,9 @@ function GameDetail({ appId, onBack, showBackButton = true }) {
         />
       )}
       <section className="game-details__container">
-        {/* Navigation Bar */}
-        <div className="game-details__navbar">
-          {showBackButton && (
-            <button onClick={onBack} className="game-details__back-button">
-              <FiArrowLeft size={24} />
-            </button>
-          )}
-          <h1 className="game-details__title">{detail.name}</h1>
+        {/* Navigation Bar is removed, Header component will handle this */}
+        <div className="game-details__navbar-placeholder">
+            {/* This empty div can be used to maintain space if needed, or removed */}
         </div>
 
         {/* Hero Section */}

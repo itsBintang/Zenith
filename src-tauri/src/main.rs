@@ -35,6 +35,183 @@ fn sanitize_filename(name: &str) -> String {
     out
 }
 
+async fn search_steam_store(query: &str, limit: u32) -> Result<Vec<SearchResultItem>, String> {
+    let url = format!(
+        "https://store.steampowered.com/api/storesearch/?term={}&l=english&cc=US",
+        urlencoding::encode(query)
+    );
+
+    let response = HTTP_CLIENT
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch search results: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Steam API returned status: {}", response.status()));
+    }
+
+    let text = response.text().await
+        .map_err(|e| format!("Failed to read response: {}", e))?;
+
+    let json: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+
+    let items = json["items"]
+        .as_array()
+        .ok_or("No items found in response")?;
+
+    let mut results = Vec::new();
+    for item in items.iter().take(limit as usize) {
+        if let (Some(id), Some(name), Some(img), Some(item_type)) = (
+            item["id"].as_u64(),
+            item["name"].as_str(),
+            item["tiny_image"].as_str(),
+            item["type"].as_str(),
+        ) {
+            // Filter out non-game items (DLC, soundtracks, etc.)
+            if !is_valid_game_item(name, item_type) {
+                continue;
+            }
+            
+            results.push(SearchResultItem {
+                app_id: id.to_string(),
+                name: name.to_string(),
+                header_image: img.replace("capsule_sm_120", "header"),
+                source: "api".to_string(),
+            });
+        }
+    }
+
+    Ok(results)
+}
+
+#[command]
+async fn search_games_hybrid(query: String, use_catalogue: bool, limit: Option<u32>) -> Result<Vec<SearchResultItem>, String> {
+    let search_limit = limit.unwrap_or(20);
+    let mut results = Vec::new();
+
+    // If use_catalogue is true, try to search in catalogue data first
+    if use_catalogue {
+        // Parse CSV from GitHub repository
+        let csv_url = "https://raw.githubusercontent.com/itsBintang/SteamDB/main/steamdb.csv";
+        
+        match HTTP_CLIENT.get(csv_url).send().await {
+            Ok(response) if response.status().is_success() => {
+                if let Ok(text) = response.text().await {
+                    // Parse CSV and search
+                    let mut csv_results = Vec::new();
+                    let mut rdr = csv::Reader::from_reader(text.as_bytes());
+                    
+                    for result in rdr.records() {
+                        if let Ok(record) = result {
+                            if record.len() >= 4 {
+                                let name = record.get(3).unwrap_or("").to_string();
+                                let app_href = record.get(1).unwrap_or("");
+                                let image_url = record.get(2).unwrap_or("").to_string();
+                                
+                                // Extract app_id from href
+                                if let Some(app_id) = extract_appid_from_url(app_href) {
+                                    // Check if name contains query (case insensitive)
+                                    if name.to_lowercase().contains(&query.to_lowercase()) {
+                                        csv_results.push(SearchResultItem {
+                                            app_id,
+                                            name,
+                                            header_image: image_url,
+                                            source: "catalogue".to_string(),
+                                        });
+                                        
+                                        if csv_results.len() >= search_limit as usize {
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    results.extend(csv_results);
+                }
+            }
+            _ => {
+                // If catalogue fails, continue to API fallback
+            }
+        }
+    }
+
+    // If no results from catalogue or not using catalogue, fallback to Steam API
+    if results.is_empty() {
+        match search_steam_store(&query, search_limit).await {
+            Ok(api_results) => {
+                results.extend(api_results);
+            }
+            Err(e) => {
+                return Err(format!("Both catalogue and API search failed. API error: {}", e));
+            }
+        }
+    }
+
+    Ok(results)
+}
+
+fn extract_appid_from_url(url: &str) -> Option<String> {
+    // Extract app ID from URLs like "https://steamdb.info/app/578080/charts/"
+    if let Some(captures) = regex::Regex::new(r"/app/(\d+)/").unwrap().captures(url) {
+        if let Some(app_id) = captures.get(1) {
+            return Some(app_id.as_str().to_string());
+        }
+    }
+    None
+}
+
+fn is_valid_game_item(name: &str, item_type: &str) -> bool {
+    // Filter out non-game item types
+    if item_type != "app" {
+        return false;
+    }
+    
+    let name_lower = name.to_lowercase();
+    
+    // Filter out common DLC/addon patterns
+    let excluded_patterns = [
+        "dlc", "downloadable content", "expansion pack", "season pass",
+        "soundtrack", "ost", "original soundtrack", "music",
+        "artbook", "art book", "wallpaper", "avatar", "emoticon",
+        "trading card", "badge", "profile background",
+        "demo", "beta", "test", "benchmark",
+        "tool", "sdk", "editor", "mod",
+        "- soundtrack", "- ost", "- music",
+        "supporter pack", "cosmetic pack", "skin pack",
+        "character pack", "weapon pack", "map pack",
+        "content pack", "bonus content", "digital deluxe",
+        "collector's edition upgrade", "upgrade pack"
+    ];
+    
+    // Check if name contains any excluded patterns
+    for pattern in &excluded_patterns {
+        if name_lower.contains(pattern) {
+            return false;
+        }
+    }
+    
+    // Additional checks for common DLC naming patterns
+    if name_lower.contains(" - ") && (
+        name_lower.contains("pack") ||
+        name_lower.contains("bundle") ||
+        name_lower.contains("edition") ||
+        name_lower.contains("content")
+    ) {
+        // Allow some exceptions like "Game - Complete Edition" which might be the main game
+        if !name_lower.contains("complete") && !name_lower.contains("definitive") && 
+           !name_lower.contains("ultimate") && !name_lower.contains("goty") &&
+           !name_lower.contains("game of the year") {
+            return false;
+        }
+    }
+    
+    true
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct DownloadResult {
     success: bool,
@@ -73,12 +250,14 @@ struct GameInfo {
     name: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize)]
 struct SearchResultItem {
     app_id: String,
     name: String,
     header_image: String,
+    source: String, // "catalogue" or "api"
 }
+
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct GameDetail {
@@ -109,12 +288,6 @@ struct LibraryGame {
     app_id: String,
     name: String,
     header_image: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct SearchAppsRawItem {
-    appid: Option<u32>,
-    name: Option<String>,
 }
 
 // Repository types we support
@@ -150,10 +323,10 @@ async fn download_game(
     // Setup repositories to try (in priority order)
     let mut repos = Vec::new();
     // Prioritas pertama
-    repos.push(("https://furcate.eu/FILES/".to_string(), RepoType::DirectZip));
-    repos.push(("Fairyvmos/bruh-hub".to_string(), RepoType::Branch));
     repos.push(("SteamAutoCracks/ManifestHub".to_string(), RepoType::Branch));
+    repos.push(("Fairyvmos/bruh-hub".to_string(), RepoType::Branch));
     repos.push(("itsBintang/ManifestHub".to_string(), RepoType::Branch));
+    repos.push(("https://furcate.eu/FILES/".to_string(), RepoType::DirectZip));
     repos.push((
         "https://raw.githubusercontent.com/sushi-dev55/sushitools-games-repo/refs/heads/main/"
             .to_string(),
@@ -363,220 +536,7 @@ async fn download_game(
     })
 }
 
-#[command]
-async fn search_games(query: String) -> Result<Vec<SearchResultItem>, String> {
-    let query = query.trim();
-    if query.is_empty() {
-        return Ok(vec![]);
-    }
 
-    println!("Searching for: '{}'", query);
-
-    // Split query into search terms (support comma-separated)
-    let search_terms: Vec<String> = query
-        .split(',')
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .collect();
-
-    let mut all_results = Vec::new();
-
-    // Process each search term
-    for term in search_terms {
-        // Check if it's a Steam URL and extract AppID
-        if let Some(app_id) = extract_appid_from_url(&term) {
-            println!("Detected Steam URL, extracted AppID: {}", app_id);
-            let name = fetch_game_name_simple(&app_id)
-                .await
-                .unwrap_or_else(|| format!("Unknown Game ({})", app_id));
-            let header = header_image_for(&app_id);
-            all_results.push(SearchResultItem {
-                app_id: app_id.clone(),
-                name,
-                header_image: header,
-            });
-        }
-        // If numeric: treat as AppID direct
-        else if term.chars().all(|c| c.is_ascii_digit()) {
-            println!("Searching by AppID: {}", term);
-            let name = fetch_game_name_simple(&term)
-                .await
-                .unwrap_or_else(|| format!("Unknown Game ({})", term));
-            let header = header_image_for(&term);
-            all_results.push(SearchResultItem {
-                app_id: term.clone(),
-                name,
-                header_image: header,
-            });
-        } else {
-            // Name search via Steam Store API (more reliable than community search)
-            println!("Searching by name: {}", term);
-
-            // Try multiple search approaches
-            let search_results = search_steam_store(&term).await;
-            all_results.extend(search_results);
-        }
-    }
-
-    // Remove duplicates based on app_id
-    let mut seen = std::collections::HashSet::new();
-    let unique_results: Vec<SearchResultItem> = all_results
-        .into_iter()
-        .filter(|item| seen.insert(item.app_id.clone()))
-        .take(50) // Limit total results
-        .collect();
-
-    println!("Found {} unique results", unique_results.len());
-    Ok(unique_results)
-}
-
-// Helper function to search Steam store
-async fn search_steam_store(query: &str) -> Vec<SearchResultItem> {
-    let mut results = Vec::new();
-
-    // Method 1: Try Steam Store search API
-    let encoded_query = query.replace(' ', "+");
-    let store_search_url = format!(
-        "https://store.steampowered.com/api/storesearch/?term={}&l=english&cc=US",
-        encoded_query
-    );
-
-    println!("Trying Steam Store API: {}", store_search_url);
-
-    if let Ok(resp) = HTTP_CLIENT.get(&store_search_url).send().await {
-        if resp.status().is_success() {
-            if let Ok(json_value) = resp.json::<serde_json::Value>().await {
-                if let Some(items) = json_value.get("items").and_then(|v| v.as_array()) {
-                    for item in items.iter().take(20) {
-                        if let (Some(id), Some(name)) = (
-                            item.get("id").and_then(|v| v.as_u64()),
-                            item.get("name").and_then(|v| v.as_str()),
-                        ) {
-                            let app_id = id.to_string();
-
-                            // Filter out non-games unless explicitly searched for
-                            let name_lower = name.to_lowercase();
-                            let query_lower = query.to_lowercase();
-
-                            let is_non_game = [
-                                "dlc",
-                                "soundtrack",
-                                "demo",
-                                "pack",
-                                "sdk",
-                                "artbook",
-                                "trailer",
-                                "movie",
-                                "beta",
-                                "ost",
-                                "wallpaper",
-                                "season pass",
-                                "bonus content",
-                                "pre-purchase",
-                                "pre-order",
-                                "expansion",
-                            ]
-                            .iter()
-                            .any(|&keyword| name_lower.contains(keyword));
-
-                            let searching_for_non_game = [
-                                "dlc",
-                                "soundtrack",
-                                "demo",
-                                "pack",
-                                "artbook",
-                                "trailer",
-                                "movie",
-                                "beta",
-                                "pass",
-                                "expansion",
-                            ]
-                            .iter()
-                            .any(|&keyword| query_lower.contains(keyword));
-
-                            if !is_non_game || searching_for_non_game {
-                                results.push(SearchResultItem {
-                                    app_id: app_id.clone(),
-                                    name: name.to_string(),
-                                    header_image: header_image_for(&app_id),
-                                });
-                            }
-                        }
-                    }
-                    println!("Found {} results from Steam Store API", results.len());
-                    return results;
-                }
-            }
-        }
-    }
-
-    // Method 2: Fallback to community search if store search fails
-    println!("Store search failed, trying community search");
-    let encoded = query.replace(' ', "%20");
-    let community_url = format!("https://steamcommunity.com/actions/SearchApps/{}", encoded);
-
-    if let Ok(resp) = HTTP_CLIENT.get(&community_url).send().await {
-        if resp.status().is_success() {
-            if let Ok(raw) = resp.json::<Vec<SearchAppsRawItem>>().await {
-                for item in raw.into_iter().take(15) {
-                    if let (Some(id), Some(name)) = (item.appid, item.name) {
-                        let app_id = id.to_string();
-
-                        // Apply same filtering
-                        let name_lower = name.to_lowercase();
-                        let query_lower = query.to_lowercase();
-
-                        let is_non_game = [
-                            "dlc",
-                            "soundtrack",
-                            "demo",
-                            "pack",
-                            "sdk",
-                            "artbook",
-                            "trailer",
-                            "movie",
-                            "beta",
-                            "ost",
-                            "wallpaper",
-                            "season pass",
-                            "bonus content",
-                            "pre-purchase",
-                            "pre-order",
-                        ]
-                        .iter()
-                        .any(|&keyword| name_lower.contains(keyword));
-
-                        let searching_for_non_game = [
-                            "dlc",
-                            "soundtrack",
-                            "demo",
-                            "pack",
-                            "artbook",
-                            "trailer",
-                            "movie",
-                            "beta",
-                            "pass",
-                        ]
-                        .iter()
-                        .any(|&keyword| query_lower.contains(keyword));
-
-                        if !is_non_game || searching_for_non_game {
-                            results.push(SearchResultItem {
-                                app_id: app_id.clone(),
-                                name,
-                                header_image: header_image_for(&app_id),
-                            });
-                        }
-                    }
-                }
-                println!("Found {} results from community search", results.len());
-            }
-        }
-    }
-
-    results
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct InitProgress {
@@ -989,88 +949,6 @@ fn header_image_for(app_id: &str) -> String {
 }
 
 // Helper function to extract AppID from Steam URLs
-fn extract_appid_from_url(input: &str) -> Option<String> {
-    // Support various Steam URL formats:
-    // https://store.steampowered.com/app/1086940/Baldurs_Gate_3/
-    // https://store.steampowered.com/app/1086940/
-    // store.steampowered.com/app/1086940/
-    // steam://store/1086940
-    // steamcommunity.com/app/1086940
-
-    let input = input.trim();
-
-    // Remove protocol if present
-    let url_part = if input.starts_with("http://") {
-        &input[7..]
-    } else if input.starts_with("https://") {
-        &input[8..]
-    } else if input.starts_with("steam://") {
-        &input[8..]
-    } else {
-        input
-    };
-
-    // Steam store URL patterns
-    if url_part.contains("store.steampowered.com/app/") {
-        if let Some(start) = url_part.find("/app/") {
-            let after_app = &url_part[start + 5..]; // Skip "/app/"
-            if let Some(end) = after_app.find('/') {
-                let app_id = &after_app[..end];
-                if app_id.chars().all(|c| c.is_ascii_digit()) {
-                    return Some(app_id.to_string());
-                }
-            } else {
-                // No trailing slash, take everything after /app/
-                if after_app.chars().all(|c| c.is_ascii_digit()) {
-                    return Some(after_app.to_string());
-                }
-            }
-        }
-    }
-
-    // Steam community URL patterns
-    if url_part.contains("steamcommunity.com/app/") {
-        if let Some(start) = url_part.find("/app/") {
-            let after_app = &url_part[start + 5..]; // Skip "/app/"
-            if let Some(end) = after_app.find('/') {
-                let app_id = &after_app[..end];
-                if app_id.chars().all(|c| c.is_ascii_digit()) {
-                    return Some(app_id.to_string());
-                }
-            } else {
-                if after_app.chars().all(|c| c.is_ascii_digit()) {
-                    return Some(after_app.to_string());
-                }
-            }
-        }
-    }
-
-    // Steam protocol URL (steam://store/1086940)
-    if url_part.starts_with("store/") {
-        let after_store = &url_part[6..]; // Skip "store/"
-        if let Some(end) = after_store.find('/') {
-            let app_id = &after_store[..end];
-            if app_id.chars().all(|c| c.is_ascii_digit()) {
-                return Some(app_id.to_string());
-            }
-        } else {
-            if after_store.chars().all(|c| c.is_ascii_digit()) {
-                return Some(after_store.to_string());
-            }
-        }
-    }
-
-    // Regex fallback for any URL containing /app/NUMBER pattern
-    if let Ok(re) = Regex::new(r"/app/(\d+)") {
-        if let Some(captures) = re.captures(input) {
-            if let Some(app_id) = captures.get(1) {
-                return Some(app_id.as_str().to_string());
-            }
-        }
-    }
-
-    None
-}
 
 async fn fetch_game_details_background(app_id: &str) -> Option<GameDetail> {
     // Background refresh for game details (no user-facing errors)
@@ -1743,8 +1621,8 @@ async fn get_batch_game_details(app_ids: Vec<String>) -> Result<Vec<GameDetail>,
     // Batch details logging reduced to prevent spam
     // println!("Fetching batch details for {} DLCs", app_ids.len());
     let mut details_list = Vec::new();
-    let mut cache_hits = 0;
-    let mut api_calls = 0;
+    let mut _cache_hits = 0;
+    let mut _api_calls = 0;
 
     // Process in smaller batches to avoid overwhelming the API
     for chunk in app_ids.chunks(5) {
@@ -1753,9 +1631,9 @@ async fn get_batch_game_details(app_ids: Vec<String>) -> Result<Vec<GameDetail>,
         for app_id in chunk {
             // Check cache first to count hits
             if GAME_CACHE.get_game_details(app_id).await.is_some() {
-                cache_hits += 1;
+                _cache_hits += 1;
             } else {
-                api_calls += 1;
+                _api_calls += 1;
             }
             batch_futures.push(get_game_details(app_id.clone()));
         }
@@ -2379,7 +2257,6 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             greet,
             download_game,
-            search_games,
             get_game_details,
             get_library_games,
             check_game_in_library,
@@ -2394,6 +2271,7 @@ fn main() {
             refresh_dlc_cache,
             refresh_cache_background,
             remove_game,
+            search_games_hybrid,
             commands::update_game_files,
             // Bypass Commands
             bypass::install_bypass,

@@ -1,8 +1,8 @@
 /* New Profile Page Styles */
 .profile-page-container {
   padding: 1rem 2rem;
-  background: #111319; /* Slightly different dark bg */
-  color: #eaeef6;
+  background: var(--hydra-bg-dark); /* Changed */
+  color: var(--hydra-text-muted); /* Changed */
   height: 100vh;
   overflow-y: auto;
   overflow-x: hidden;
@@ -19,7 +19,7 @@
   border-radius: 12px;
   overflow: hidden;
   position: relative;
-  background: linear-gradient(135deg, #1a1a2e, #16213e);
+  background: linear-gradient(135deg, var(--hydra-bg), var(--hydra-brand-blue)); /* Changed */
 }
 
 .profile-banner img {
@@ -40,8 +40,8 @@
   gap: 0.5rem;
   padding: 0.5rem 1rem;
   background: rgba(0,0,0,0.4);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #eaeef6;
+  border: 1px solid var(--hydra-border); /* Changed */
+  color: var(--hydra-text-muted); /* Changed */
   border-radius: 8px;
   cursor: pointer;
   font-size: 0.8rem;
@@ -77,8 +77,8 @@
   width: 120px;
   height: 120px;
   border-radius: 50%;
-  border: 4px solid #111319;
-  background: #2a2d36;
+  border: 4px solid var(--hydra-bg-dark); /* Changed */
+  background: var(--hydra-bg); /* Changed */
   object-fit: cover;
 }
 
@@ -102,11 +102,11 @@
   font-size: 2rem;
   font-weight: 700;
   margin: 0;
-  color: #ffffff;
+  color: var(--hydra-text-muted); /* Changed */
 }
 
 .profile-user-badge {
-  background: linear-gradient(45deg, #8a2be2, #c056f5);
+  background: linear-gradient(45deg, var(--hydra-brand-blue), var(--hydra-brand-teal)); /* Changed */
   color: white;
   padding: 0.25rem 0.75rem;
   border-radius: 6px;
@@ -118,7 +118,7 @@
 
 .profile-user-bio {
   margin: 0.5rem 0 0 0;
-  color: #9ca3af;
+  color: var(--hydra-text-body); /* Changed */
   font-size: 0.9rem;
   line-height: 1.4;
   max-width: 400px;
@@ -128,7 +128,7 @@
   align-items: center;
   gap: 0.5rem;
   font-size: 0.9rem;
-  color: #a0a6b1;
+  color: var(--hydra-text-body); /* Changed */
   margin: 0;
 }
 
@@ -157,7 +157,7 @@
   justify-content: space-between;
   align-items: center;
   padding-bottom: 1rem;
-  border-bottom: 1px solid rgba(255,255,255,0.1);
+  border-bottom: 1px solid var(--hydra-border); /* Changed */
   margin-bottom: 1.5rem;
 }
 .profile-library-column .library-title {
@@ -167,20 +167,20 @@
 
 .profile-library-column .library-count {
   background: none;
-  color: #a0a6b1;
+  color: var(--hydra-text-body); /* Changed */
   padding: 0;
   font-size: 1rem;
   font-weight: 500;
 }
 
 .profile-library-column .library-filter-input {
-  background: #1c1e25;
-  border: 1px solid rgba(255,255,255,0.1);
+  background: var(--hydra-bg); /* Changed */
+  border: 1px solid var(--hydra-border); /* Changed */
   transition: all 0.2s ease;
 }
 .profile-library-column .library-filter-input:focus {
-  border-color: #8a2be2;
-  box-shadow: 0 0 0 3px rgba(138, 43, 226, 0.2);
+  border-color: var(--hydra-brand-blue); /* Changed */
+  box-shadow: 0 0 0 3px rgba(62, 98, 192, 0.2); /* Changed */
 }
 
 .profile-library-column .library-games-grid {
@@ -211,11 +211,11 @@
   aspect-ratio: 4 / 5; /* 4:5 portrait (less tall) */
   min-height: 175px; /* smaller height */
   border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.12);
+  border: 1px solid var(--hydra-border); /* Changed */
   transition: all 0.2s ease;
   overflow: hidden;
   box-shadow: 0 4px 16px rgba(0,0,0,0.25), 0 2px 8px rgba(0,0,0,0.15); /* layered shadow for depth */
-  background: #1a1d24; /* dark background */
+  background: var(--hydra-bg); /* Changed */
 }
 .profile-library-column .game-card-image img {
   width: 100%;

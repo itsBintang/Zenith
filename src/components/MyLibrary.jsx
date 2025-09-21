@@ -65,14 +65,16 @@ function MyLibrary({ onGameSelect, libraryState, onRefreshLibrary, onUpdateFilte
   return (
     <div className="my-library-container">
       <div className="library-header">
-        <h2 className="library-title">MY LIBRARY</h2>
-        <button 
-          className={`library-refresh-btn ${isLoading ? 'loading' : ''}`} 
-          onClick={fetchLibraryGames}
-          disabled={isLoading}
-        >
-          <FiRefreshCw size={14} />
-        </button>
+        <div className="library-title-container">
+          <h2 className="library-title">MY LIBRARY</h2>
+          <button 
+            className={`library-refresh-btn ${isLoading ? 'loading' : ''}`} 
+            onClick={fetchLibraryGames}
+            disabled={isLoading}
+          >
+            <FiRefreshCw size={14} />
+          </button>
+        </div>
       </div>
       
       <div className="library-filter-container">

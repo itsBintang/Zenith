@@ -1,92 +1,58 @@
 import React from "react";
+import { Outlet, useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import CustomTitleBar from "./components/CustomTitleBar";
 import Sidebar from "./components/Sidebar";
-import Home from "./components/Home";
-import Catalogue from "./components/Catalogue";
-import GameDetail from "./components/GameDetail";
 import LoadingScreen from "./components/LoadingScreen";
-import Settings from "./components/Settings";
-import UserProfile from "./components/UserProfile";
-import Bypass from "./components/Bypass";
+import Header from "./components/Header"; // Import the new Header
 import "./App.css";
 
 function App() {
-  const [route, setRoute] = React.useState("home");
-  const [activeAppId, setActiveAppId] = React.useState(null);
-  const [fromLibrary, setFromLibrary] = React.useState(false);
-  const [catalogueState, setCatalogueState] = React.useState({
-    query: "",
-    results: [],
-    hasSearched: false
-  });
   const [isLoading, setIsLoading] = React.useState(true);
   const [loadingProgress, setLoadingProgress] = React.useState(0);
   const [loadingStep, setLoadingStep] = React.useState("Initializing Zenith...");
   const [initError, setInitError] = React.useState(null);
   
-  // Shared library state
-  const [libraryState, setLibraryState] = React.useState({
-    games: [],
-    isLoading: true,
-    error: null,
-    filter: ''
-  });
-
-  // Profile refresh state
+  // We'll need a way to manage library and profile state later, 
+  // perhaps with Context API as a replacement for the old prop drilling.
+  const [libraryState, setLibraryState] = React.useState({ games: [], isLoading: true, error: null, filter: '' });
   const [profileRefreshTrigger, setProfileRefreshTrigger] = React.useState(0);
+  const [globalSearchQuery, setGlobalSearchQuery] = React.useState("");
+  
+  const navigate = useNavigate();
 
-  // App initialization
   React.useEffect(() => {
     let isMounted = true;
-    let hasInitialized = false;
-    
     const initializeApp = async () => {
-      // Prevent double initialization in React.StrictMode
-      if (hasInitialized) return;
-      hasInitialized = true;
-      
       try {
         setLoadingStep("Starting initialization...");
-        setLoadingProgress(10);
-        
-        // Small delay for smooth UX
         await new Promise(resolve => setTimeout(resolve, 500));
-        
         if (!isMounted) return;
         
         const progressSteps = await invoke('initialize_app');
-        
         if (!isMounted) return;
-        
-        // Animate through progress steps
+
         for (let i = 0; i < progressSteps.length; i++) {
           const step = progressSteps[i];
           if (!isMounted) return;
           setLoadingStep(step.step);
           setLoadingProgress(step.progress);
-          
-          // Small delay between steps for smooth animation
           await new Promise(resolve => setTimeout(resolve, 300));
         }
         
         if (!isMounted) return;
         
-        // Final completion
         setLoadingStep("Welcome to Zenith!");
         setLoadingProgress(100);
         await new Promise(resolve => setTimeout(resolve, 800));
         
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        if (isMounted) setIsLoading(false);
         
       } catch (error) {
         console.error('App initialization failed:', error);
         if (isMounted) {
           setInitError(error.toString());
           setLoadingStep("Initialization failed");
-          // Still allow app to continue after 3 seconds
           setTimeout(() => {
             if (isMounted) setIsLoading(false);
           }, 3000);
@@ -96,89 +62,39 @@ function App() {
 
     initializeApp();
     
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, []);
 
+  // Event listener to handle navigation from backend or other non-React parts
   React.useEffect(() => {
     const handler = (e) => {
       const { appId } = e.detail || {};
       if (appId) {
-        setActiveAppId(appId);
-        setFromLibrary(false); // Reset when coming from event
-        setRoute("detail");
+        navigate(`/game/${appId}`);
       }
     };
     window.addEventListener('open-game-detail', handler);
     return () => window.removeEventListener('open-game-detail', handler);
-  }, []);
+  }, [navigate]);
 
-  // Reset fromLibrary when navigating away from detail
-  React.useEffect(() => {
-    if (route !== 'detail') {
-      setFromLibrary(false);
-    }
-  }, [route]);
-
-  const handleGameSelect = (appId) => {
-    setActiveAppId(appId);
-    setFromLibrary(false);
-    setRoute("detail");
-  };
-
-  const handleLibraryGameSelect = (appId) => {
-    setActiveAppId(appId);
-    setFromLibrary(true);
-    setRoute("detail");
-  };
-
-  const handleProfileClick = () => {
-    setRoute("profile");
-  };
-
-  // Shared library functions
   const loadLibrary = async () => {
     setLibraryState(prev => ({ ...prev, isLoading: true, error: null }));
-    
     try {
       const games = await invoke('get_library_games');
-      setLibraryState(prev => ({ 
-        ...prev, 
-        games: games || [], 
-        isLoading: false 
-      }));
+      setLibraryState(prev => ({ ...prev, games: games || [], isLoading: false }));
     } catch (error) {
       console.error('Error loading library:', error);
-      setLibraryState(prev => ({ 
-        ...prev, 
-        error: error.message || 'Failed to load library', 
-        isLoading: false 
-      }));
+      setLibraryState(prev => ({ ...prev, error: error.message || 'Failed to load library', isLoading: false }));
     }
   };
 
-  const refreshLibrary = async () => {
-    await loadLibrary();
-  };
-
-  const updateLibraryFilter = (filter) => {
-    setLibraryState(prev => ({ ...prev, filter }));
-  };
-
-  // Profile refresh function
-  const refreshProfile = () => {
-    setProfileRefreshTrigger(prev => prev + 1);
-  };
-
-  // Load library on app initialization
   React.useEffect(() => {
     if (!isLoading && !initError) {
       loadLibrary();
     }
   }, [isLoading, initError]);
 
-  // Show loading screen during initialization
+
   if (isLoading) {
     return (
       <div className="app-container">
@@ -193,69 +109,37 @@ function App() {
     );
   }
 
-  let content;
-  switch (route) {
-    case 'home':
-      content = <Home onGameSelect={handleGameSelect} />;
-      break;
-    case 'catalogue':
-      content = <Catalogue 
-        onGameSelect={handleGameSelect} 
-        catalogueState={catalogueState}
-        setCatalogueState={setCatalogueState}
-      />;
-      break;
-    case 'bypass':
-      content = <Bypass />;
-      break;
-    case 'detail':
-      content = <GameDetail 
-        appId={activeAppId} 
-        onBack={() => setRoute('catalogue')} 
-        showBackButton={!fromLibrary}
-      />;
-      break;
-    case 'settings':
-      content = <Settings />;
-      break;
-    case 'profile':
-      content = <UserProfile 
-        onGameSelect={handleLibraryGameSelect}
-        onBack={() => setRoute('home')}
-        libraryState={libraryState}
-        onRefreshLibrary={refreshLibrary}
-        onUpdateFilter={updateLibraryFilter}
-        onProfileUpdate={refreshProfile}
-      />;
-      break;
-    default:
-      content = <Home />;
-  }
-
   return (
     <div className="app-container">
-      {/* Title bar theme options:
-          - "app-theme": Matches app background exactly (#0f0f10)
-          - "transparent": Fully transparent with blur effect
-          - "glass": Semi-transparent glass effect
-          - "sidebar-theme": Gradient that matches sidebar
-          - Default (no theme): Semi-transparent dark
-      */}
       <CustomTitleBar theme="app-theme" />
       <div className="ui-shell">
         <Sidebar 
-          active={route} 
-          onNavigate={setRoute} 
-          onGameSelect={handleLibraryGameSelect}
-          onProfileClick={handleProfileClick}
+          // Pass necessary state and functions to Sidebar
+          // Note: navigation is now handled by <Link> or useNavigate in the component itself
           libraryState={libraryState}
-          onRefreshLibrary={refreshLibrary}
-          onUpdateFilter={updateLibraryFilter}
+          onRefreshLibrary={loadLibrary}
+          onUpdateFilter={(filter) => setLibraryState(prev => ({ ...prev, filter }))}
           refreshProfileTrigger={profileRefreshTrigger}
         />
-        <main className="ui-main">
-          {content}
-        </main>
+        <div className="ui-main-container">
+          <Header 
+            globalSearchQuery={globalSearchQuery}
+            setGlobalSearchQuery={setGlobalSearchQuery}
+          />
+          <main className="ui-main">
+            {/* Outlet will render the matched child route component (Home, Catalogue, etc.) */}
+            <Outlet context={{ 
+                // We can pass down state and functions via Outlet's context
+                // to avoid prop drilling through intermediate routes.
+                libraryState, 
+                refreshLibrary: loadLibrary,
+                updateLibraryFilter: (filter) => setLibraryState(prev => ({ ...prev, filter })),
+                refreshProfile: () => setProfileRefreshTrigger(p => p + 1),
+                globalSearchQuery,
+                setGlobalSearchQuery,
+            }}/>
+          </main>
+        </div>
       </div>
     </div>
   );

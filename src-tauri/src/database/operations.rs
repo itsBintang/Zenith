@@ -64,33 +64,6 @@ impl GameOperations {
         Ok(games)
     }
 
-    /// Search games by name
-    pub fn search_by_name(conn: &Connection, query: &str, limit: Option<u32>) -> Result<Vec<Game>> {
-        let search_pattern = format!("%{}%", query.to_lowercase());
-        let mut games = Vec::new();
-        
-        if let Some(l) = limit {
-            let mut stmt = conn.prepare(
-                "SELECT app_id, name, header_image, cached_at, expires_at, last_updated 
-                 FROM games WHERE LOWER(name) LIKE ?1 ORDER BY name LIMIT ?2"
-            )?;
-            let game_iter = stmt.query_map(params![search_pattern, l], |row| Game::from_row(row))?;
-            for game_result in game_iter {
-                games.push(game_result?);
-            }
-        } else {
-            let mut stmt = conn.prepare(
-                "SELECT app_id, name, header_image, cached_at, expires_at, last_updated 
-                 FROM games WHERE LOWER(name) LIKE ?1 ORDER BY name"
-            )?;
-            let game_iter = stmt.query_map([search_pattern], |row| Game::from_row(row))?;
-            for game_result in game_iter {
-                games.push(game_result?);
-            }
-        }
-        
-        Ok(games)
-    }
 
     /// Delete a game
     pub fn delete(conn: &Connection, app_id: &str) -> Result<bool> {

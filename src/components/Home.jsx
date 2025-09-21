@@ -1,16 +1,23 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import FeaturedBanner from "./FeaturedBanner";
 import GameGrid from "./GameGrid";
 
-function Home({ onGameSelect }) {
+function Home() {
+  const navigate = useNavigate();
+
+  const handleGameSelect = (appId) => {
+    if (appId) {
+      navigate(`/game/${appId}`);
+    }
+  };
+
   return (
     <div className="ui-page">
-      <div className="ui-subheader">
-        <div className="ui-header__title">Home</div>
-      </div>
+      {/* Header is now global, so local header is removed */}
       <div className="ui-content">
-        <FeaturedBanner onGameSelect={onGameSelect} />
-        <GameGrid onGameSelect={onGameSelect} />
+        <FeaturedBanner onGameSelect={handleGameSelect} />
+        <GameGrid onGameSelect={handleGameSelect} />
       </div>
     </div>
   );

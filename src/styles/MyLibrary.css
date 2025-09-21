@@ -9,11 +9,19 @@
 
 .library-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
-  padding: 0 20px;
+  padding: 0; /* Remove horizontal padding since parent already has it */
   margin-bottom: 0.75rem;
   flex-shrink: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.library-title-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .library-title {
@@ -21,6 +29,8 @@
   font-weight: 600;
   color: #888;
   letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin: 0;
 }
 
 .library-refresh-btn {
@@ -28,12 +38,15 @@
   border: none;
   color: #888;
   cursor: pointer;
-  padding: 0.25rem;
+  padding: 4px;
   border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: color 0.2s, transform 0.2s;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
 }
 
 .library-refresh-btn:hover {
@@ -50,13 +63,14 @@
 }
 
 .library-filter-container {
-  padding: 0 20px;
+  padding: 0; /* Remove horizontal padding since parent already has it */
   margin-bottom: 0.5rem;
   flex-shrink: 0;
 }
 
 .library-filter-input {
-  width: 100%;
+  width: 180px; /* Fixed width instead of 100% */
+  max-width: 100%; /* Responsive fallback */
   background-color: #15161a;
   border: 1px solid #26272b;
   border-radius: 10px;
@@ -74,7 +88,7 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 0 12px;
+  padding: 0; /* Remove horizontal padding since parent already has it */
 }
 
 /* Scrollbar styling removed - using global unified scrollbar from App.css */
@@ -104,6 +118,8 @@
   cursor: pointer;
   color: #ddd;
   transition: background-color 0.2s;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .library-game-item:hover {
@@ -122,4 +138,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
 }

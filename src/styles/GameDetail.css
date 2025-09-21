@@ -17,7 +17,7 @@
   justify-content: center;
   height: 100%;
   font-size: 1.2rem;
-  color: #888;
+  color: var(--hydra-text-body);
 }
 
 /* Hero Section */
@@ -69,9 +69,9 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  color: #e0e0e0;
+  color: var(--hydra-text-muted);
   font-size: 0.9rem;
-  border: solid 1px rgba(255, 255, 255, 0.2);
+  border: solid 1px var(--hydra-border);
   box-shadow: 0px 0px 10px 0px rgba(0, 0, 0, 0.8);
 }
 
@@ -94,9 +94,9 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  color: #e0e0e0;
+  color: var(--hydra-text-muted);
   font-size: 0.9rem;
-  border: solid 1px rgba(255, 255, 255, 0.2);
+  border: solid 1px var(--hydra-border);
   box-shadow: 0px 0px 10px 0px rgba(0, 0, 0, 0.8);
 }
 
@@ -108,9 +108,9 @@
 
 .game-details__update-button.updating,
 .game-details__update-button:disabled {
-  background-color: rgba(66, 165, 245, 0.2);
-  border-color: rgba(66, 165, 245, 0.4);
-  color: #42a5f5;
+  background-color: rgba(62, 98, 192, 0.2);
+  border-color: rgba(62, 98, 192, 0.4);
+  color: var(--hydra-brand-blue);
   cursor: not-allowed;
   animation: pulse 2s infinite;
 }
@@ -123,9 +123,9 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  background-color: #1a1a1a;
+  background-color: var(--hydra-bg);
   min-height: auto;
-  border-bottom: solid 1px #333;
+  border-bottom: solid 1px var(--hydra-border);
   position: relative;
   z-index: 3;
   box-sizing: border-box;
@@ -158,7 +158,7 @@
 .hero-panel__content p {
   margin: 0;
   font-size: 0.9rem;
-  color: #b0b0b0;
+  color: var(--hydra-text-body);
 }
 
 .hero-panel__playtime {
@@ -239,8 +239,8 @@
 
 .hero-button--primary {
   background: rgba(0, 0, 0, 0.7);
-  color: #e0e0e0;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--hydra-text-muted);
+  border: 1px solid var(--hydra-border);
 }
 
 .hero-button--primary:hover:not(:disabled) {
@@ -252,7 +252,7 @@
 
 .hero-button--primary:disabled {
   background: rgba(0, 0, 0, 0.5);
-  color: #888;
+  color: var(--hydra-text-body);
   border-color: rgba(255, 255, 255, 0.1);
   cursor: not-allowed;
   opacity: 0.7;
@@ -267,7 +267,7 @@
   height: 16px;
   margin: auto;
   border: 2px solid transparent;
-  border-top-color: #ffffff;
+  border-top-color: var(--hydra-text-muted);
   border-radius: 50%;
   animation: spin 1s ease infinite;
   right: 10px;
@@ -281,19 +281,19 @@
 }
 
 .hero-button--play {
-  background: #4caf50;
+  background: var(--hydra-brand-teal);
   color: white;
 }
 
 .hero-button--play:hover {
-  background: #45a049;
+  filter: brightness(1.1);
   transform: translateY(-2px);
 }
 
 .hero-button--secondary {
   background: rgba(255, 255, 255, 0.1);
   color: white;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--hydra-border);
   padding: 0.75rem;
 }
 
@@ -302,15 +302,15 @@
 }
 
 .hero-button--play {
-  background: #0d1117;
-  color: #c9d1d9;
-  border: 1px solid #21262d;
+  background: var(--hydra-bg-dark);
+  color: var(--hydra-text-muted);
+  border: 1px solid var(--hydra-border);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
 .hero-button--play:hover:not(:disabled) {
-  background: #161b22;
-  color: #f0f6fc;
+  background: var(--hydra-bg);
+  color: #fff;
   border-color: #30363d;
   transform: translateY(-1px);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
@@ -318,7 +318,7 @@
 
 .hero-button--play:disabled {
   background: #090c10;
-  color: #6e7681;
+  color: var(--hydra-text-body);
   border-color: #161b22;
   cursor: not-allowed;
   opacity: 0.6;
@@ -327,15 +327,15 @@
 }
 
 .hero-button--danger {
-  background: #0d1117;
-  color: #c9d1d9;
-  border: 1px solid #21262d;
+  background: var(--hydra-bg-dark);
+  color: var(--hydra-text-muted);
+  border: 1px solid var(--hydra-border);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
 .hero-button--danger:hover:not(:disabled) {
-  background: #161b22;
-  color: #f0f6fc;
+  background: var(--hydra-bg);
+  color: #fff;
   border-color: #30363d;
   transform: translateY(-1px);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
@@ -343,7 +343,7 @@
 
 .hero-button--danger:disabled {
   background: #090c10;
-  color: #6e7681;
+  color: var(--hydra-text-body);
   border-color: #161b22;
   cursor: not-allowed;
   opacity: 0.6;
@@ -359,7 +359,7 @@
   height: 16px;
   margin: auto;
   border: 2px solid transparent;
-  border-top-color: #ffffff;
+  border-top-color: var(--hydra-text-muted);
   border-radius: 50%;
   animation: spin 1s ease infinite;
   right: 10px;
@@ -388,8 +388,8 @@
   flex: 1;
   background: linear-gradient(
     0deg,
-    #1a1a1a 50%,
-    #0f0f0f 100%
+    var(--hydra-bg) 50%,
+    var(--hydra-bg-dark) 100%
   );
   box-sizing: border-box;
 }
@@ -425,7 +425,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  color: #888;
+  color: #555;
   font-size: 0.85rem;
 }
 
@@ -521,7 +521,7 @@
 
 .gallery-slider__thumbnail.active {
   opacity: 1;
-  border-color: #4a90e2;
+  border-color: var(--hydra-brand-blue);
 }
 
 /* Game Description */
@@ -534,7 +534,7 @@
   max-width: 100%;
   margin-left: auto;
   margin-right: auto;
-  color: #d0d0d0;
+  color: var(--hydra-text-body);
   box-sizing: border-box;
   overflow-x: hidden;
   word-wrap: break-word;
@@ -564,7 +564,7 @@
 }
 
 .game-details__description a {
-  color: #4a90e2;
+  color: var(--hydra-brand-blue);
   text-decoration: none;
 }
 
@@ -575,7 +575,7 @@
 .game-details__description h1,
 .game-details__description h2,
 .game-details__description h3 {
-  color: white;
+  color: var(--hydra-text-muted);
   margin: 2rem 0 1rem;
 }
 
@@ -593,7 +593,7 @@
 .content-sidebar {
   width: 100%;
   padding: 1rem;
-  border-top: 1px solid #333;
+  border-top: 1px solid var(--hydra-border);
   overflow-y: auto;
   background: rgba(0, 0, 0, 0.3);
   box-sizing: border-box;
@@ -604,7 +604,7 @@
     width: 320px;
     min-width: 320px;
     padding: 2rem 1rem;
-    border-left: 1px solid #333;
+    border-left: 1px solid var(--hydra-border);
     border-top: none;
   }
 }
@@ -623,7 +623,7 @@
   font-size: 1rem;
   font-weight: 600;
   margin-bottom: 0.75rem;
-  color: white;
+  color: var(--hydra-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -639,11 +639,11 @@
 /* Requirements */
 .requirement__button-container {
   display: flex;
-  background-color: #2c2c2c;
+  background-color: var(--hydra-bg);
   border-radius: 4px;
   overflow: hidden;
   padding: 4px;
-  border: 1px solid #444;
+  border: 1px solid var(--hydra-border);
 }
 
 .requirement__button {
@@ -651,7 +651,7 @@
   padding: 0.5rem 0.75rem;
   background: transparent;
   border: none;
-  color: #a0a0a0;
+  color: var(--hydra-text-body);
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s ease-in-out;
@@ -667,8 +667,8 @@
 }
 
 .requirement__button:hover {
-  background: #3a3a3a;
-  color: #fff;
+  background: var(--hydra-bg-dark);
+  color: var(--hydra-text-muted);
 }
 
 .requirement__button.active {
@@ -684,14 +684,14 @@
 .requirement__type-title {
   font-size: 1rem;
   font-weight: 600;
-  color: #e0e0e0;
+  color: var(--hydra-text-muted);
   margin: 0 0 0.75rem 0;
 }
 
 .requirement__details {
   font-size: 0.85rem;
   line-height: 1.7;
-  color: #b0b0b0;
+  color: var(--hydra-text-body);
   word-wrap: break-word;
 }
 
@@ -717,14 +717,14 @@
 }
 
 .drm__loading {
-  color: #888;
+  color: var(--hydra-text-body);
   font-size: 0.85rem;
   margin: 0;
   font-style: italic;
 }
 
 .drm__none {
-  color: #888;
+  color: var(--hydra-text-body);
   font-size: 0.85rem;
   margin: 0;
   font-style: italic;
@@ -860,9 +860,9 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  color: #e0e0e0;
+  color: var(--hydra-text-muted);
   font-size: 0.9rem;
-  border: solid 1px rgba(255, 255, 255, 0.2);
+  border: solid 1px var(--hydra-border);
   box-shadow: 0px 0px 10px 0px rgba(0, 0, 0, 0.8);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -884,9 +884,9 @@
 }
 
 .game-details__bypass-button.validating {
-  background-color: rgba(66, 165, 245, 0.2);
-  border-color: rgba(66, 165, 245, 0.4);
-  color: #42a5f5;
+  background-color: rgba(62, 98, 192, 0.2);
+  border-color: rgba(62, 98, 192, 0.4);
+  color: var(--hydra-brand-blue);
   cursor: not-allowed;
   animation: pulse 2s infinite;
 }
@@ -894,8 +894,8 @@
 .game-details__bypass-button.installed {
   background-color: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(20px);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: #e0e0e0;
+  border-color: var(--hydra-border);
+  color: var(--hydra-text-muted);
   cursor: pointer;
 }
 
@@ -915,7 +915,7 @@
   width: 16px;
   height: 16px;
   border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top: 2px solid white;
+  border-top: 2px solid var(--hydra-text-muted);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -953,13 +953,13 @@
 
 /* Bypass Confirmation Modal */
 .bypass-confirmation-modal {
-  background: linear-gradient(145deg, #1e1e2e, #2a2a3a);
+  background: linear-gradient(145deg, var(--hydra-bg), #2a2a3a);
   padding: 32px;
   border-radius: 16px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   min-width: 450px;
   max-width: 90vw;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--hydra-border);
   animation: slideUp 0.3s ease-out;
 }
 
@@ -975,14 +975,14 @@
 }
 
 .confirmation-content h3 {
-  color: white;
+  color: var(--hydra-text-muted);
   margin: 0 0 16px 0;
   font-size: 1.6rem;
   font-weight: 600;
 }
 
 .confirmation-message {
-  color: #ccc;
+  color: var(--hydra-text-body);
   margin: 0 0 20px 0;
   line-height: 1.6;
   font-size: 15px;
@@ -1052,8 +1052,8 @@
 
 .confirmation-button.secondary {
   background: rgba(255, 255, 255, 0.1);
-  color: #ccc;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--hydra-text-muted);
+  border: 1px solid var(--hydra-border);
 }
 
 .confirmation-button.secondary:hover {
@@ -1064,13 +1064,13 @@
 
 /* Bypass Progress Modal */
 .bypass-progress-modal {
-  background: linear-gradient(145deg, #1e1e2e, #2a2a3a);
+  background: linear-gradient(145deg, var(--hydra-bg), #2a2a3a);
   padding: 32px;
   border-radius: 16px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   min-width: 400px;
   max-width: 90vw;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--hydra-border);
   animation: slideUp 0.3s ease-out;
 }
 
@@ -1140,8 +1140,8 @@
 
 .bypass-confirmation__cancel-button {
   background: rgba(255, 255, 255, 0.08);
-  color: #d0d0d0;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: var(--hydra-text-muted);
+  border: 1px solid var(--hydra-border);
 }
 
 .bypass-confirmation__cancel-button:hover {
@@ -1215,7 +1215,7 @@
 }
 
 .progress-step {
-  color: #ccc;
+  color: var(--hydra-text-body);
   margin: 0;
   font-size: 14px;
 }
@@ -1228,14 +1228,14 @@
 
 /* Launch Game Popup */
 .launch-popup-modal {
-  background: linear-gradient(145deg, #1e1e2e, #2a2a3a);
+  background: linear-gradient(145deg, var(--hydra-bg), #2a2a3a);
   border-radius: 20px;
   box-shadow: 0 25px 80px rgba(0, 0, 0, 0.6);
   max-width: 600px;
   width: 90vw;
   max-height: 80vh;
   overflow-y: auto;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--hydra-border);
   animation: slideUp 0.4s ease-out;
 }
 
@@ -1246,7 +1246,7 @@
 
 .launch-icon {
   font-size: 4rem;
-  color: #4caf50;
+  color: var(--hydra-brand-teal);
   margin-bottom: 20px;
   animation: bounce 1s ease-in-out;
 }
@@ -1265,7 +1265,7 @@
 }
 
 .launch-popup-content p {
-  color: #ccc;
+  color: var(--hydra-text-body);
   margin: 0 0 32px 0;
   line-height: 1.6;
   font-size: 15px;
@@ -1283,15 +1283,15 @@
 }
 
 .info-section {
-  background: rgba(76, 175, 80, 0.1);
-  border: 1px solid rgba(76, 175, 80, 0.3);
+  background: rgba(22, 177, 149, 0.1);
+  border: 1px solid rgba(22, 177, 149, 0.3);
   border-radius: 12px;
   padding: 20px;
   margin-bottom: 16px;
 }
 
 .info-section h4 {
-  color: #4caf50;
+  color: var(--hydra-brand-teal);
   margin: 0 0 12px 0;
   font-size: 16px;
   font-weight: 600;
@@ -1304,12 +1304,12 @@
 }
 
 .info-list li {
-  color: #e0e0e0;
+  color: var(--hydra-text-muted);
   margin: 8px 0;
   padding: 8px 0;
   font-size: 14px;
   line-height: 1.5;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--hydra-border);
 }
 
 .info-list li:last-child {
@@ -1317,7 +1317,7 @@
 }
 
 .info-list li strong {
-  color: #4caf50;
+  color: var(--hydra-brand-teal);
   font-weight: 600;
 }
 
@@ -1431,19 +1431,19 @@
 }
 
 .executable-item:hover {
-  background: rgba(76, 175, 80, 0.1);
+  background: rgba(22, 177, 149, 0.1);
 }
 
 .executable-item.recommended {
-  background: rgba(76, 175, 80, 0.15);
-  border: 1px solid rgba(76, 175, 80, 0.3);
+  background: rgba(22, 177, 149, 0.15);
+  border: 1px solid rgba(22, 177, 149, 0.3);
   border-radius: 8px;
   margin: 8px;
-  border-bottom: 1px solid rgba(76, 175, 80, 0.3);
+  border-bottom: 1px solid rgba(22, 177, 149, 0.3);
 }
 
 .executable-item.recommended:hover {
-  background: rgba(76, 175, 80, 0.2);
+  background: rgba(22, 177, 149, 0.2);
 }
 
 .executable-info {
@@ -1459,7 +1459,7 @@
 
 .recommended-badge {
   font-size: 11px;
-  color: #4caf50;
+  color: var(--hydra-brand-teal);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -1472,13 +1472,13 @@
 }
 
 .executable-size {
-  color: #888;
+  color: var(--hydra-text-body);
   font-size: 13px;
   font-weight: 400;
 }
 
 .launch-icon-small {
-  color: #4caf50;
+  color: var(--hydra-brand-teal);
   font-size: 20px;
   flex-shrink: 0;
 }
@@ -1486,7 +1486,7 @@
 .no-executables {
   padding: 24px;
   text-align: center;
-  color: #888;
+  color: var(--hydra-text-body);
   font-style: italic;
 }
 
@@ -1517,21 +1517,21 @@
 }
 
 .launch-button.primary {
-  background: linear-gradient(135deg, #4caf50, #66bb6a);
+  background: linear-gradient(135deg, var(--hydra-brand-teal), #18c2a3);
   color: white;
-  box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+  box-shadow: 0 4px 15px rgba(22, 177, 149, 0.3);
 }
 
 .launch-button.primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
-  background: linear-gradient(135deg, #45a049, #5cb85c);
+  box-shadow: 0 6px 20px rgba(22, 177, 149, 0.4);
+  background: linear-gradient(135deg, #14a890, #16b195);
 }
 
 .launch-button.secondary {
   background: rgba(255, 255, 255, 0.1);
-  color: #ccc;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--hydra-text-body);
+  border: 1px solid var(--hydra-border);
 }
 
 .launch-button.secondary:hover {

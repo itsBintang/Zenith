@@ -448,322 +448,301 @@ function Bypass() {
   }, [showLaunchPopup, selectedGame, gameExecutables]);
 
   return (
-    <div className="bypass-page">
-      {notification && (
-        <ToastNotification
-          message={notification.message}
-          type={notification.type}
-          onClose={closeNotification}
-        />
-      )}
-
-      {/* Header */}
-      <div className="bypass-header">
-        <div className="bypass-header__left">
-          <h1>Bypass</h1>
-        </div>
-        <div className="bypass-header__right">
-          <div className="bypass-search">
-            <FiSearch className="bypass-search__icon" />
-            <input
-              type="text"
-              placeholder="Search games..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bypass-search__input"
+    <div className="ui-page">
+      <div className="ui-content">
+        <div className="bypass-container">
+          {notification && (
+            <ToastNotification
+              message={notification.message}
+              type={notification.type}
+              onClose={closeNotification}
             />
-          </div>
-          <button 
-            className={`bypass-refresh-btn ${isRefreshing ? 'loading' : ''}`}
-            onClick={refreshBypassGames}
-            disabled={isRefreshing || isLoading}
-            title="Refresh bypass games from GitHub"
-          >
-            <FiRefreshCw size={16} />
-          </button>
-        </div>
-      </div>
+          )}
 
-      {/* Games Grid */}
-      <div className="bypass-content">
-        {isLoading ? (
-          <div className="bypass-loading">
-            <div className="spinner"></div>
-            <p>Loading bypass games...</p>
-          </div>
-        ) : filteredGames.length === 0 ? (
-          <div className="bypass-empty">
-            <FiShield size={64} className="bypass-empty__icon" />
-            <h3>No games found</h3>
-            <p>
-              {searchQuery 
-                ? "No games match your search criteria" 
-                : "No bypass games available. Check back later!"
-              }
-            </p>
-          </div>
-        ) : (
-          <div className="bypass-games-grid">
-            {filteredGames.map((game) => (
-              <GameCard
-                key={game.appId}
-                game={game}
-                onBypassClick={handleBypassClick}
-                bypassStatus={bypassStatus}
-                isLoading={isLoading}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Bypass Confirmation Modal */}
-      {showBypassConfirmation && selectedGame && (
-        <div className="denuvo-modal-overlay">
-          <div className="denuvo-activation-modal">
-            {/* Header */}
-            <div className="denuvo-header">
-              <h2 className="denuvo-header-title">Bypass Activation</h2>
-              <p className="denuvo-header-subtitle">Manage Bypass activation for this game</p>
-              <button 
-                className="denuvo-close-btn"
-                onClick={() => {
-                  setShowBypassConfirmation(false);
-                  setSelectedGame(null);
-                  setGameInstallationStatus({
-                    isInstalled: false,
-                    isChecking: false,
-                    gamePath: "",
-                    isManualPath: false
-                  });
-                }}
-              >
-                <FiX size={20} />
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="denuvo-content">
-              {/* Game Card */}
-              <div className="denuvo-game-card">
-                <div className="denuvo-game-image">
-                  <img src={selectedGame.image} alt={selectedGame.name} />
-                </div>
-                <div className="denuvo-game-info">
-                  <h3 className="denuvo-game-title">{selectedGame.name}</h3>
-                  <p className="denuvo-game-appid">App ID: {selectedGame.appId}</p>
-                </div>
+          {/* Header is now managed globally by Header.jsx */}
+          
+          {/* Games Grid */}
+          <div className="bypass-content">
+            {isLoading ? (
+              <div className="bypass-loading">
+                <div className="spinner"></div>
+                <p>Loading bypass games...</p>
               </div>
-
-              {/* Automated Bypass Activation */}
-              <div className="denuvo-automation-section">
-                <h4 className="denuvo-automation-title">Automated Bypass Activation</h4>
-                <p className="denuvo-automation-description">
-                  Click "Install Bypass" to automatically process Bypass installation for this game.
+            ) : filteredGames.length === 0 ? (
+              <div className="bypass-empty">
+                <FiShield size={64} className="bypass-empty__icon" />
+                <h3>No games found</h3>
+                <p>
+                  {searchQuery 
+                    ? "No games match your search criteria" 
+                    : "No bypass games available. Check back later!"
+                  }
                 </p>
+              </div>
+            ) : (
+              <div className="bypass-games-grid">
+                {filteredGames.map((game) => (
+                  <GameCard
+                    key={game.appId}
+                    game={game}
+                    onBypassClick={handleBypassClick}
+                    bypassStatus={bypassStatus}
+                    isLoading={isLoading}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
 
-                {/* Progress Section - moved here */}
-                {showBypassProgress && (
-                  <div className="bypass-progress-section">
-                    <h3 className="progress-section-title">Activation Progress</h3>
-                    <div className="activation-steps-container">
-                      {/* Step 1: Initializing */}
-                      <div className="activation-step">
-                        <div className={`step-circle ${bypassProgress.progress >= 0 ? (bypassProgress.progress >= 10 ? 'completed' : 'active') : 'pending'}`}>
-                          {bypassProgress.progress >= 10 ? <FiCheck size={16} /> : 
-                           bypassProgress.progress >= 0 ? <div className="spinner-small"></div> : '1'}
+          {/* Bypass Confirmation Modal */}
+          {showBypassConfirmation && selectedGame && (
+            <div className="denuvo-modal-overlay">
+              <div className="denuvo-activation-modal">
+                {/* Header */}
+                <div className="denuvo-header">
+                  <h2 className="denuvo-header-title">Bypass Activation</h2>
+                  <p className="denuvo-header-subtitle">Manage Bypass activation for this game</p>
+                  <button 
+                    className="denuvo-close-btn"
+                    onClick={() => {
+                      setShowBypassConfirmation(false);
+                      setSelectedGame(null);
+                      setGameInstallationStatus({
+                        isInstalled: false,
+                        isChecking: false,
+                        gamePath: "",
+                        isManualPath: false
+                      });
+                    }}
+                  >
+                    <FiX size={20} />
+                  </button>
+                </div>
+
+                {/* Content */}
+                <div className="denuvo-content">
+                  {/* Game Card */}
+                  <div className="denuvo-game-card">
+                    <div className="denuvo-game-image">
+                      <img src={selectedGame.image} alt={selectedGame.name} />
+                    </div>
+                    <div className="denuvo-game-info">
+                      <h3 className="denuvo-game-title">{selectedGame.name}</h3>
+                      <p className="denuvo-game-appid">App ID: {selectedGame.appId}</p>
+                    </div>
+                  </div>
+
+                  {/* Automated Bypass Activation */}
+                  <div className="denuvo-automation-section">
+                    <h4 className="denuvo-automation-title">Automated Bypass Activation</h4>
+                    <p className="denuvo-automation-description">
+                      Click "Install Bypass" to automatically process Bypass installation for this game.
+                    </p>
+
+                    {/* Progress Section - moved here */}
+                    {showBypassProgress && (
+                      <div className="bypass-progress-section">
+                        <h3 className="progress-section-title">Activation Progress</h3>
+                        <div className="activation-steps-container">
+                          {/* Step 1: Initializing */}
+                          <div className="activation-step">
+                            <div className={`step-circle ${bypassProgress.progress >= 0 ? (bypassProgress.progress >= 10 ? 'completed' : 'active') : 'pending'}`}>
+                              {bypassProgress.progress >= 10 ? <FiCheck size={16} /> : 
+                               bypassProgress.progress >= 0 ? <div className="spinner-small"></div> : '1'}
+                            </div>
+                            <span className="step-label">Initializing</span>
+                          </div>
+
+                          {/* Step 2: Steam Detection */}
+                          <div className="activation-step">
+                            <div className={`step-circle ${bypassProgress.progress >= 10 ? (bypassProgress.progress >= 20 ? 'completed' : 'active') : 'pending'}`}>
+                              {bypassProgress.progress >= 20 ? <FiCheck size={16} /> : 
+                               bypassProgress.progress >= 10 ? <div className="spinner-small"></div> : '2'}
+                            </div>
+                            <span className="step-label">Steam Detection</span>
+                          </div>
+
+                          {/* Step 3: Game Validation */}
+                          <div className="activation-step">
+                            <div className={`step-circle ${bypassProgress.progress >= 20 ? (bypassProgress.progress >= 30 ? 'completed' : 'active') : 'pending'}`}>
+                              {bypassProgress.progress >= 30 ? <FiCheck size={16} /> : 
+                               bypassProgress.progress >= 20 ? <div className="spinner-small"></div> : '3'}
+                            </div>
+                            <span className="step-label">Game Validation</span>
+                          </div>
+
+                          {/* Step 4: Downloading Bypass */}
+                          <div className="activation-step">
+                            <div className={`step-circle ${bypassProgress.progress >= 30 ? (bypassProgress.progress >= 60 ? 'completed' : 'active') : 'pending'}`}>
+                              {bypassProgress.progress >= 60 ? <FiCheck size={16} /> : 
+                               bypassProgress.progress >= 30 ? <div className="spinner-small"></div> : '4'}
+                            </div>
+                            <span className="step-label">Downloading Bypass</span>
+                          </div>
+
+                          {/* Step 5: Extracting Files */}
+                          <div className="activation-step">
+                            <div className={`step-circle ${bypassProgress.progress >= 60 ? (bypassProgress.progress >= 85 ? 'completed' : 'active') : 'pending'}`}>
+                              {bypassProgress.progress >= 85 ? <FiCheck size={16} /> : 
+                               bypassProgress.progress >= 60 ? <div className="spinner-small"></div> : '5'}
+                            </div>
+                            <span className="step-label">Extracting Files</span>
+                          </div>
+
+                          {/* Step 6: Installing Bypass */}
+                          <div className="activation-step">
+                            <div className={`step-circle ${bypassProgress.progress >= 85 ? (bypassProgress.progress >= 95 ? 'completed' : 'active') : 'pending'}`}>
+                              {bypassProgress.progress >= 95 ? <FiCheck size={16} /> : 
+                               bypassProgress.progress >= 85 ? <div className="spinner-small"></div> : '6'}
+                            </div>
+                            <span className="step-label">Installing Bypass</span>
+                          </div>
+
+                          {/* Step 7: Finalizing */}
+                          <div className="activation-step">
+                            <div className={`step-circle ${bypassProgress.progress >= 95 ? (bypassProgress.progress >= 100 ? 'completed' : 'active') : 'pending'}`}>
+                              {bypassProgress.progress >= 100 ? <FiCheck size={16} /> : 
+                               bypassProgress.progress >= 95 ? <div className="spinner-small"></div> : '7'}
+                            </div>
+                            <span className="step-label">Finalizing</span>
+                          </div>
                         </div>
-                        <span className="step-label">Initializing</span>
                       </div>
+                    )}
 
-                      {/* Step 2: Steam Detection */}
-                      <div className="activation-step">
-                        <div className={`step-circle ${bypassProgress.progress >= 10 ? (bypassProgress.progress >= 20 ? 'completed' : 'active') : 'pending'}`}>
-                          {bypassProgress.progress >= 20 ? <FiCheck size={16} /> : 
-                           bypassProgress.progress >= 10 ? <div className="spinner-small"></div> : '2'}
-                        </div>
-                        <span className="step-label">Steam Detection</span>
+                    {/* Status Items */}
+                    <div className="denuvo-status-items">
+                      <div className="denuvo-status-item">
+                        <span className="denuvo-status-label">Game Installed:</span>
+                        {gameInstallationStatus.isChecking ? (
+                          <span className="denuvo-status-value validating">
+                            <div className="spinner small"></div>
+                            Checking...
+                          </span>
+                        ) : gameInstallationStatus.isInstalled ? (
+                          <span className="denuvo-status-value success">
+                            <FiCheck size={16} />
+                            Yes
+                          </span>
+                        ) : (
+                          <span className="denuvo-status-value error">
+                            <FiX size={16} />
+                            No
+                          </span>
+                        )}
                       </div>
-
-                      {/* Step 3: Game Validation */}
-                      <div className="activation-step">
-                        <div className={`step-circle ${bypassProgress.progress >= 20 ? (bypassProgress.progress >= 30 ? 'completed' : 'active') : 'pending'}`}>
-                          {bypassProgress.progress >= 30 ? <FiCheck size={16} /> : 
-                           bypassProgress.progress >= 20 ? <div className="spinner-small"></div> : '3'}
-                        </div>
-                        <span className="step-label">Game Validation</span>
+                      <div className="denuvo-status-item">
+                        <span className="denuvo-status-label">Bypass Downloaded:</span>
+                        <span className="denuvo-status-value success">
+                          <FiCheck size={16} />
+                          Ready
+                        </span>
                       </div>
-
-                      {/* Step 4: Downloading Bypass */}
-                      <div className="activation-step">
-                        <div className={`step-circle ${bypassProgress.progress >= 30 ? (bypassProgress.progress >= 60 ? 'completed' : 'active') : 'pending'}`}>
-                          {bypassProgress.progress >= 60 ? <FiCheck size={16} /> : 
-                           bypassProgress.progress >= 30 ? <div className="spinner-small"></div> : '4'}
+                      <div className="denuvo-status-item">
+                        <span className="denuvo-status-label">Game Path:</span>
+                        <div className="denuvo-path-container">
+                          <span className="denuvo-status-value path">
+                            {gameInstallationStatus.gamePath || "Game not found"}
+                            {gameInstallationStatus.isManualPath && (
+                              <span className="manual-path-indicator"> (Manual)</span>
+                            )}
+                          </span>
+                          <button 
+                            className="browse-path-btn"
+                            onClick={browseManualGamePath}
+                            title="Browse for game folder"
+                          >
+                            <FiFolder size={14} />
+                            Browse
+                          </button>
                         </div>
-                        <span className="step-label">Downloading Bypass</span>
-                      </div>
-
-                      {/* Step 5: Extracting Files */}
-                      <div className="activation-step">
-                        <div className={`step-circle ${bypassProgress.progress >= 60 ? (bypassProgress.progress >= 85 ? 'completed' : 'active') : 'pending'}`}>
-                          {bypassProgress.progress >= 85 ? <FiCheck size={16} /> : 
-                           bypassProgress.progress >= 60 ? <div className="spinner-small"></div> : '5'}
-                        </div>
-                        <span className="step-label">Extracting Files</span>
-                      </div>
-
-                      {/* Step 6: Installing Bypass */}
-                      <div className="activation-step">
-                        <div className={`step-circle ${bypassProgress.progress >= 85 ? (bypassProgress.progress >= 95 ? 'completed' : 'active') : 'pending'}`}>
-                          {bypassProgress.progress >= 95 ? <FiCheck size={16} /> : 
-                           bypassProgress.progress >= 85 ? <div className="spinner-small"></div> : '6'}
-                        </div>
-                        <span className="step-label">Installing Bypass</span>
-                      </div>
-
-                      {/* Step 7: Finalizing */}
-                      <div className="activation-step">
-                        <div className={`step-circle ${bypassProgress.progress >= 95 ? (bypassProgress.progress >= 100 ? 'completed' : 'active') : 'pending'}`}>
-                          {bypassProgress.progress >= 100 ? <FiCheck size={16} /> : 
-                           bypassProgress.progress >= 95 ? <div className="spinner-small"></div> : '7'}
-                        </div>
-                        <span className="step-label">Finalizing</span>
                       </div>
                     </div>
                   </div>
-                )}
 
-                {/* Status Items */}
-                <div className="denuvo-status-items">
-                  <div className="denuvo-status-item">
-                    <span className="denuvo-status-label">Game Installed:</span>
-                    {gameInstallationStatus.isChecking ? (
-                      <span className="denuvo-status-value validating">
-                        <div className="spinner small"></div>
-                        Checking...
-                      </span>
-                    ) : gameInstallationStatus.isInstalled ? (
-                      <span className="denuvo-status-value success">
-                        <FiCheck size={16} />
-                        Yes
-                      </span>
+                  {/* Activate Button */}
+                  {!showBypassProgress && (
+                    <button 
+                      className={`denuvo-activate-btn-bottom ${(!gameInstallationStatus.isInstalled && !gameInstallationStatus.gamePath) || gameInstallationStatus.isChecking ? 'disabled' : ''}`}
+                      onClick={handleBypassConfirm}
+                      disabled={(!gameInstallationStatus.isInstalled && !gameInstallationStatus.gamePath) || gameInstallationStatus.isChecking}
+                    >
+                      <FiShield size={16} />
+                      {gameInstallationStatus.isChecking ? 'Checking Game...' : 
+                       (!gameInstallationStatus.isInstalled && !gameInstallationStatus.gamePath) ? 'Game Not Installed' : 
+                       gameInstallationStatus.isManualPath ? 'Install Bypass (Manual Path)' :
+                       'Install Bypass'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+
+          {/* Launch Game Popup */}
+          {showLaunchPopup && (
+            <div className="modal-overlay">
+              <div className="launch-popup-modal">
+                <div className="launch-popup-content">
+                  <h3>Bypass Terinstal</h3>
+                  
+                  <div className="launch-popup-info simplified">
+                    <p>
+                      <strong>Penting:</strong> Untuk mengaktifkan bypass, game harus dijalankan <strong>pertama kali</strong> dari sini. Jangan buka melalui Steam atau shortcut lain.
+                    </p>
+                  </div>
+
+                  <div className="launch-popup-question">
+                    <h4>Pilih executable untuk launch game:</h4>
+                  </div>
+
+                  <div className="executable-list">
+                    {loadingExecutables ? (
+                      <div className="loading-executables">
+                        <div className="spinner"></div>
+                        <span>Scanning executable files...</span>
+                      </div>
+                    ) : gameExecutables.length > 0 ? (
+                      gameExecutables.map((exe, index) => (
+                          <button
+                            key={exe.path}
+                            className="executable-item"
+                            onClick={() => handleLaunchSelectedExecutable(exe.path, exe.name)}
+                          >
+                            <div className="executable-info">
+                              <div className="executable-name">
+                                <span className="exe-name">{exe.name}</span>
+                              </div>
+                              <div className="executable-size">{exe.size_mb.toFixed(1)} MB</div>
+                            </div>
+                            <FiPlay className="launch-icon-small" />
+                          </button>
+                        ))
                     ) : (
-                      <span className="denuvo-status-value error">
-                        <FiX size={16} />
-                        No
-                      </span>
+                      <div className="no-executables">
+                        <p>No executable files found in game directory.</p>
+                      </div>
                     )}
                   </div>
-                  <div className="denuvo-status-item">
-                    <span className="denuvo-status-label">Bypass Downloaded:</span>
-                    <span className="denuvo-status-value success">
-                      <FiCheck size={16} />
-                      Ready
-                    </span>
-                  </div>
-                  <div className="denuvo-status-item">
-                    <span className="denuvo-status-label">Game Path:</span>
-                    <div className="denuvo-path-container">
-                      <span className="denuvo-status-value path">
-                        {gameInstallationStatus.gamePath || "Game not found"}
-                        {gameInstallationStatus.isManualPath && (
-                          <span className="manual-path-indicator"> (Manual)</span>
-                        )}
-                      </span>
-                      <button 
-                        className="browse-path-btn"
-                        onClick={browseManualGamePath}
-                        title="Browse for game folder"
-                      >
-                        <FiFolder size={14} />
-                        Browse
-                      </button>
-                    </div>
+                  
+                  <div className="launch-popup-actions">
+                    <button 
+                      className="launch-button secondary"
+                      onClick={() => {
+                        setShowLaunchPopup(false);
+                        setSelectedGame(null);
+                      }}
+                    >
+                      Cancel
+                    </button>
                   </div>
                 </div>
               </div>
-
-              {/* Activate Button */}
-              {!showBypassProgress && (
-                <button 
-                  className={`denuvo-activate-btn-bottom ${(!gameInstallationStatus.isInstalled && !gameInstallationStatus.gamePath) || gameInstallationStatus.isChecking ? 'disabled' : ''}`}
-                  onClick={handleBypassConfirm}
-                  disabled={(!gameInstallationStatus.isInstalled && !gameInstallationStatus.gamePath) || gameInstallationStatus.isChecking}
-                >
-                  <FiShield size={16} />
-                  {gameInstallationStatus.isChecking ? 'Checking Game...' : 
-                   (!gameInstallationStatus.isInstalled && !gameInstallationStatus.gamePath) ? 'Game Not Installed' : 
-                   gameInstallationStatus.isManualPath ? 'Install Bypass (Manual Path)' :
-                   'Install Bypass'}
-                </button>
-              )}
             </div>
-          </div>
+          )}
         </div>
-      )}
-
-
-      {/* Launch Game Popup */}
-      {showLaunchPopup && (
-        <div className="modal-overlay">
-          <div className="launch-popup-modal">
-            <div className="launch-popup-content">
-              <h3>Bypass Terinstal</h3>
-              
-              <div className="launch-popup-info simplified">
-                <p>
-                  <strong>Penting:</strong> Untuk mengaktifkan bypass, game harus dijalankan <strong>pertama kali</strong> dari sini. Jangan buka melalui Steam atau shortcut lain.
-                </p>
-              </div>
-
-              <div className="launch-popup-question">
-                <h4>Pilih executable untuk launch game:</h4>
-              </div>
-
-              <div className="executable-list">
-                {loadingExecutables ? (
-                  <div className="loading-executables">
-                    <div className="spinner"></div>
-                    <span>Scanning executable files...</span>
-                  </div>
-                ) : gameExecutables.length > 0 ? (
-                  gameExecutables.map((exe, index) => (
-                      <button
-                        key={exe.path}
-                        className="executable-item"
-                        onClick={() => handleLaunchSelectedExecutable(exe.path, exe.name)}
-                      >
-                        <div className="executable-info">
-                          <div className="executable-name">
-                            <span className="exe-name">{exe.name}</span>
-                          </div>
-                          <div className="executable-size">{exe.size_mb.toFixed(1)} MB</div>
-                        </div>
-                        <FiPlay className="launch-icon-small" />
-                      </button>
-                    ))
-                ) : (
-                  <div className="no-executables">
-                    <p>No executable files found in game directory.</p>
-                  </div>
-                )}
-              </div>
-              
-              <div className="launch-popup-actions">
-                <button 
-                  className="launch-button secondary"
-                  onClick={() => {
-                    setShowLaunchPopup(false);
-                    setSelectedGame(null);
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }

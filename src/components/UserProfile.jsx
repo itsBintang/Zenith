@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useOutletContext, useNavigate } from 'react-router-dom';
 import { FiUser, FiUpload, FiEdit, FiAward, FiBarChart2, FiGitMerge } from 'react-icons/fi';
 import { invoke } from '@tauri-apps/api/core';
 import LibraryGrid from './LibraryGrid';
@@ -10,7 +11,10 @@ import '../styles/UserProfile.css';
 const bannerImage = "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80";
 
 
-function UserProfile({ onGameSelect, onBack, libraryState, onRefreshLibrary, onUpdateFilter, onProfileUpdate }) {
+function UserProfile() {
+  const { libraryState, refreshLibrary, updateLibraryFilter, refreshProfile } = useOutletContext();
+  const navigate = useNavigate();
+
   const [profile, setProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
@@ -90,8 +94,8 @@ function UserProfile({ onGameSelect, onBack, libraryState, onRefreshLibrary, onU
           await loadProfile();
           
           // Refresh sidebar profile
-          if (onProfileUpdate) {
-            onProfileUpdate();
+          if (refreshProfile) {
+            refreshProfile();
           }
           
           console.log('Banner upload completed successfully');
@@ -168,8 +172,8 @@ function UserProfile({ onGameSelect, onBack, libraryState, onRefreshLibrary, onU
           await loadProfile();
           
           // Refresh sidebar profile
-          if (onProfileUpdate) {
-            onProfileUpdate();
+          if (refreshProfile) {
+            refreshProfile();
           }
           
           console.log('Avatar upload completed successfully');
@@ -200,6 +204,10 @@ function UserProfile({ onGameSelect, onBack, libraryState, onRefreshLibrary, onU
       console.error('Error opening file dialog:', error);
       setIsUploading(false);
     }
+  };
+
+  const handleGameSelect = (appId) => {
+    navigate(`/game/${appId}`);
   };
 
   if (isLoading) {
@@ -264,15 +272,15 @@ function UserProfile({ onGameSelect, onBack, libraryState, onRefreshLibrary, onU
         {/* Library Section */}
         <div className="profile-library-column">
           <LibraryGrid
-            onGameSelect={onGameSelect}
+            onGameSelect={handleGameSelect}
             title="Library"
             showHeader={true}
             showFilter={false}
             showRefresh={false} // Refresh is handled globally
             gridView={true}
             libraryState={libraryState}
-            onRefreshLibrary={onRefreshLibrary}
-            onUpdateFilter={onUpdateFilter}
+            onRefreshLibrary={refreshLibrary}
+            onUpdateFilter={updateLibraryFilter}
           />
         </div>
       </main>
@@ -284,8 +292,8 @@ function UserProfile({ onGameSelect, onBack, libraryState, onRefreshLibrary, onU
         profile={profile}
         onProfileUpdate={async () => {
           await loadProfile();
-          if (onProfileUpdate) {
-            onProfileUpdate();
+          if (refreshProfile) {
+            refreshProfile();
           }
         }}
       />
