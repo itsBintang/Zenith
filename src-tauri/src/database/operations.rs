@@ -360,7 +360,8 @@ impl UserProfileOperations {
     /// Get user profile (always returns the single profile entry)
     pub fn get(conn: &Connection) -> Result<Option<UserProfile>> {
         let mut stmt = conn.prepare(
-            "SELECT id, name, bio, steam_id, banner_path, avatar_path, created_at, updated_at 
+            "SELECT id, name, bio, steam_id, banner_path, avatar_path, created_at, updated_at,
+                    cached_at, expires_at, is_backed_up, backup_created_at 
              FROM user_profile WHERE id = 1"
         )?;
         
@@ -370,12 +371,66 @@ impl UserProfileOperations {
         Ok(profile)
     }
 
-    /// Insert or update user profile
+    /// Create automatic backup before updating profile
+    pub fn create_backup(conn: &Connection, reason: &str) -> Result<()> {
+        // Get current profile
+        if let Some(profile) = Self::get(conn)? {
+            conn.execute(
+                "INSERT OR REPLACE INTO user_profile_backup 
+                 (id, name, bio, steam_id, banner_path, avatar_path, created_at, updated_at,
+                  cached_at, expires_at, backup_created_at, backup_reason) 
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                params![
+                    profile.id,
+                    profile.name,
+                    profile.bio,
+                    profile.steam_id,
+                    profile.banner_path,
+                    profile.avatar_path,
+                    profile.created_at,
+                    profile.updated_at,
+                    profile.cached_at,
+                    profile.expires_at,
+                    chrono::Utc::now().timestamp(),
+                    reason
+                ],
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Restore profile from backup
+    pub fn restore_from_backup(conn: &Connection) -> Result<bool> {
+        let backup_exists: bool = conn.prepare(
+            "SELECT 1 FROM user_profile_backup WHERE id = 1"
+        )?.exists([])?;
+
+        if backup_exists {
+            conn.execute(
+                "INSERT OR REPLACE INTO user_profile 
+                 (id, name, bio, steam_id, banner_path, avatar_path, created_at, updated_at,
+                  cached_at, expires_at, is_backed_up, backup_created_at)
+                 SELECT id, name, bio, steam_id, banner_path, avatar_path, created_at, updated_at,
+                        cached_at, expires_at, 1, backup_created_at
+                 FROM user_profile_backup WHERE id = 1",
+                [],
+            )?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Insert or update user profile with automatic backup
     pub fn upsert(conn: &Connection, profile: &UserProfile) -> Result<()> {
+        // Create backup before updating
+        let _ = Self::create_backup(conn, "auto_update");
+        
         conn.execute(
             "INSERT OR REPLACE INTO user_profile 
-             (id, name, bio, steam_id, banner_path, avatar_path, created_at, updated_at) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+             (id, name, bio, steam_id, banner_path, avatar_path, created_at, updated_at,
+              cached_at, expires_at, is_backed_up, backup_created_at) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 profile.id,
                 profile.name,
@@ -384,7 +439,11 @@ impl UserProfileOperations {
                 profile.banner_path,
                 profile.avatar_path,
                 profile.created_at,
-                profile.updated_at
+                profile.updated_at,
+                profile.cached_at,
+                profile.expires_at,
+                profile.is_backed_up as i32,
+                profile.backup_created_at
             ],
         )?;
         Ok(())

@@ -9,6 +9,27 @@ use crate::database::{DatabaseManager, operations::*};
 use crate::database::models::{Game, GameDetailDb, BypassGame, BypassInfo};
 use crate::GameDetail;
 
+/// Log levels for cache operations
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LogLevel {
+    Silent,   // No logging
+    Error,    // Only errors
+    Warn,     // Errors and warnings
+    Info,     // Errors, warnings, and important info
+    Debug,    // All logging (verbose)
+}
+
+impl Default for LogLevel {
+    fn default() -> Self {
+        // Use Info level for production, Debug for development
+        #[cfg(debug_assertions)]
+        return LogLevel::Info;  // Reduced from Debug to Info
+        
+        #[cfg(not(debug_assertions))]
+        LogLevel::Error
+    }
+}
+
 /// Configuration for cache batch processing and rate limiting
 #[derive(Clone)]
 pub struct CacheConfig {
@@ -18,17 +39,19 @@ pub struct CacheConfig {
     pub request_delay_ms: u64,
     pub circuit_breaker_threshold: u32,
     pub max_retries: u32,
+    pub log_level: LogLevel,
 }
 
 impl Default for CacheConfig {
     fn default() -> Self {
         Self {
-            max_concurrent_requests: 3,  // Conservative untuk Steam API
-            batch_size: 15,             // Small batches
-            batch_delay_seconds: 15,    // 15 detik antar batch
-            request_delay_ms: 1500,     // 1.5 detik antar request
-            circuit_breaker_threshold: 3, // Lebih sensitif
-            max_retries: 2,             // Fewer retries
+            max_concurrent_requests: 5,  // Slightly more concurrent requests
+            batch_size: 20,             // Larger batches for efficiency
+            batch_delay_seconds: 10,    // Reduced delay between batches
+            request_delay_ms: 1000,     // Reduced delay between requests
+            circuit_breaker_threshold: 10, // Much more tolerant - only break after 10 failures
+            max_retries: 5,             // More retries before giving up
+            log_level: LogLevel::default(), // Use default log level
         }
     }
 }
@@ -95,7 +118,7 @@ impl SqliteCacheService {
         if let Some(detail) = cached_detail {
             if !detail.is_expired() {
                 // Fresh data - return immediately
-                // Cache hit - silent unless verbose debugging needed
+                // Cache hit logging disabled to reduce noise
                 // #[cfg(debug_assertions)]
                 // println!("Cache HIT (fresh) for {}", app_id);
                 
@@ -103,24 +126,35 @@ impl SqliteCacheService {
             } else {
                 // Check what categories are expired for smarter handling
                 let expired_categories = detail.get_expired_categories();
+                let now = chrono::Utc::now().timestamp();
+                let age_days = (now - detail.cached_at) / (24 * 3600);
                 
-                #[cfg(debug_assertions)]
-                println!("Cache HIT (stale) for {}, expired: {:?}", app_id, expired_categories);
+                // Only log stale cache hits for important debugging
+                // #[cfg(debug_assertions)]
+                // println!("Cache HIT (stale) for {}, expired: {:?}, age: {} days", app_id, expired_categories, age_days);
                 
-                // For critical data (DLC), force fresh fetch
-                if expired_categories.contains(&"dynamic") {
+                // Only force fresh fetch if data is VERY old (over 1 year) or critically expired
+                let is_critically_expired = age_days > 365 || 
+                    (expired_categories.contains(&"dynamic") && age_days > 180);
+                
+                if is_critically_expired {
                     #[cfg(debug_assertions)]
-                    println!("Critical data expired for {}, forcing fresh fetch", app_id);
+                    println!("Data critically expired for {} (age: {} days), forcing fresh fetch", app_id, age_days);
                     
-                    return None; // Force API call for critical data
+                    return None; // Force API call only for critically expired data
                 } else {
-                    // For non-critical data, return stale and refresh in background
+                    // For all other cases, return stale data and refresh in background
+                    // This provides better UX - users get immediate response
                     let stale_data = detail.clone();
                     let app_id_clone = app_id.to_string();
                     let service_clone = Arc::new(self.clone_for_background());
                     
+                    // Background refresh logging disabled to reduce noise
+                    // #[cfg(debug_assertions)]
+                    // println!("Returning stale data for {} and refreshing in background", app_id);
+                    
                     tokio::spawn(async move {
-                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
                         let _ = service_clone.refresh_game_details_background(&app_id_clone).await;
                     });
 
@@ -128,14 +162,38 @@ impl SqliteCacheService {
                 }
             }
         } else {
-            #[cfg(debug_assertions)]
-            println!("Cache MISS for {}", app_id);
+            // Cache miss logging disabled to reduce noise
+            // #[cfg(debug_assertions)]
+            // println!("Cache MISS for {}", app_id);
         }
 
         None
     }
 
-    /// Set game details in cache
+    /// Validate cache data before invalidation
+    fn validate_cache_before_invalidation(&self, data: &GameDetailDb) -> bool {
+        let now = chrono::Utc::now().timestamp();
+        let age_days = (now - data.cached_at) / (24 * 3600);
+        
+        // Don't invalidate if data is less than 30 days old, regardless of TTL
+        if age_days < 30 {
+            #[cfg(debug_assertions)]
+            println!("Cache validation: Data too fresh to invalidate (age: {} days)", age_days);
+            return false;
+        }
+        
+        // Don't invalidate if we have valid core data (name, images)
+        if !data.name.is_empty() && !data.header_image.is_empty() {
+            #[cfg(debug_assertions)]
+            println!("Cache validation: Core data still valid, keeping cache");
+            return false;
+        }
+        
+        // Only invalidate if data is genuinely problematic
+        true
+    }
+
+    /// Set game details in cache with validation
     pub fn set_game_details(&self, app_id: String, details: GameDetail) -> Result<()> {
         let db_detail: GameDetailDb = details.clone().into();
         
@@ -145,7 +203,7 @@ impl SqliteCacheService {
                 details.app_id.clone(),
                 details.name.clone(),
                 details.header_image.clone(),
-                604800, // 7 days TTL for game names
+                crate::database::ttl_config::TtlConfig::GAME_NAME, // Use proper TTL
             );
             GameOperations::upsert(conn, &game)?;
             
@@ -155,8 +213,9 @@ impl SqliteCacheService {
 
         match result {
             Ok(_) => {
-                #[cfg(debug_assertions)]
-                println!("Successfully cached game details for {} with granular TTL", app_id);
+        // Cache success logging disabled to reduce noise
+        // #[cfg(debug_assertions)]
+        // println!("Successfully cached game details for {} with enhanced TTL", app_id);
                 Ok(())
             }
             Err(e) => {
@@ -220,8 +279,9 @@ impl SqliteCacheService {
             GameOperations::upsert(conn, &game)
         })?;
 
-        #[cfg(debug_assertions)]
-        println!("Cached game name for {}: {}", app_id, name);
+        // Game name cache logging disabled to reduce noise
+        // #[cfg(debug_assertions)]
+        // println!("Cached game name for {}: {}", app_id, name);
 
         Ok(())
     }
@@ -381,6 +441,19 @@ impl SqliteCacheService {
         })?;
 
         println!("All cache cleared");
+        Ok(())
+    }
+
+    /// Invalidate (delete) game details for a specific app_id to force fresh fetch
+    pub fn invalidate_game_details(&self, app_id: &str) -> Result<()> {
+        self.db.with_connection(|conn| {
+            conn.execute("DELETE FROM game_details WHERE app_id = ?", [app_id])?;
+            Ok(())
+        })?;
+        
+        #[cfg(debug_assertions)]
+        println!("Invalidated game details cache for app_id: {}", app_id);
+        
         Ok(())
     }
 
@@ -605,11 +678,13 @@ impl SqliteCacheService {
 
         // Check if we have valid cached data
         if !cached_games.is_empty() && !cached_games.iter().any(|game| game.is_expired()) {
-            println!("Bypass games cache HIT: {} games", cached_games.len());
+            // Bypass cache hit logging disabled to reduce noise
+            // println!("Bypass games cache HIT: {} games", cached_games.len());
             return Ok(cached_games);
         }
 
-        println!("Bypass games cache MISS or expired - loading from fallback JSON");
+        // Only log when loading from external source
+        // println!("Bypass games cache MISS or expired - loading from fallback JSON");
         
         // If cache is empty or expired, load from JSON and cache it
         self.load_bypass_games_from_json().await

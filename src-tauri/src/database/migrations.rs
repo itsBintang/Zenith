@@ -2,7 +2,7 @@ use anyhow::Result;
 use rusqlite::Connection;
 
 /// Current database schema version
-const CURRENT_SCHEMA_VERSION: i32 = 4;
+const CURRENT_SCHEMA_VERSION: i32 = 5;
 
 /// Run all necessary database migrations
 pub fn run_migrations(conn: &Connection) -> Result<()> {
@@ -68,6 +68,7 @@ fn migrate_to_version(conn: &Connection, version: i32) -> Result<()> {
         2 => migrate_to_v2(conn),
         3 => migrate_to_v3(conn),
         4 => migrate_to_v4(conn),
+        5 => migrate_to_v5(conn),
         _ => Err(anyhow::anyhow!("Unknown migration version: {}", version)),
     }
 }
@@ -247,6 +248,131 @@ fn migrate_to_v4(conn: &Connection) -> Result<()> {
     }
     
     println!("Bypass games table migration completed successfully");
+    Ok(())
+}
+
+/// Migration to version 5: Add TTL and backup support to user profile
+fn migrate_to_v5(conn: &Connection) -> Result<()> {
+    println!("Adding TTL and backup support to user profile (v5)...");
+    
+    // Use transaction for safe migration
+    conn.execute("BEGIN TRANSACTION", [])?;
+    
+    let result = migrate_v5_internal(conn);
+    
+    match result {
+        Ok(_) => {
+            conn.execute("COMMIT", [])?;
+            println!("Migration to v5 completed successfully - Profile TTL and backup support added");
+            Ok(())
+        }
+        Err(e) => {
+            conn.execute("ROLLBACK", [])?;
+            eprintln!("Migration v5 failed, rolled back: {}", e);
+            // Don't fail the entire migration - just log the error
+            println!("⚠️  Migration v5 skipped due to error, continuing with existing schema");
+            Ok(())
+        }
+    }
+}
+
+/// Internal migration logic for v5
+fn migrate_v5_internal(conn: &Connection) -> Result<()> {
+    // Check existing columns in user_profile table
+    let mut stmt = conn.prepare("PRAGMA table_info(user_profile)")?;
+    let column_names: Vec<String> = stmt.query_map([], |row| {
+        Ok(row.get::<_, String>(1)?) // column name is at index 1
+    })?.collect::<Result<Vec<_>, _>>()?;
+    
+    // Get current timestamp for migration
+    let now = chrono::Utc::now().timestamp();
+    let expires_in_year = now + 31536000; // 1 year from now
+    
+    // Add new TTL columns if they don't exist
+    if !column_names.contains(&"cached_at".to_string()) {
+        conn.execute(
+            "ALTER TABLE user_profile ADD COLUMN cached_at INTEGER DEFAULT 0",
+            [],
+        )?;
+        // Update existing records with current timestamp
+        conn.execute(
+            "UPDATE user_profile SET cached_at = ?1 WHERE cached_at = 0",
+            [now],
+        )?;
+    }
+    
+    if !column_names.contains(&"expires_at".to_string()) {
+        conn.execute(
+            "ALTER TABLE user_profile ADD COLUMN expires_at INTEGER DEFAULT 0",
+            [],
+        )?;
+        // Update existing records with future timestamp (1 year)
+        conn.execute(
+            "UPDATE user_profile SET expires_at = ?1 WHERE expires_at = 0",
+            [expires_in_year],
+        )?;
+    }
+    
+    if !column_names.contains(&"is_backed_up".to_string()) {
+        conn.execute(
+            "ALTER TABLE user_profile ADD COLUMN is_backed_up INTEGER DEFAULT 0",
+            [],
+        )?;
+    }
+    
+    if !column_names.contains(&"backup_created_at".to_string()) {
+        conn.execute(
+            "ALTER TABLE user_profile ADD COLUMN backup_created_at INTEGER DEFAULT 0",
+            [],
+        )?;
+    }
+    
+    // Create backup table if it doesn't exist
+    let backup_table_exists: bool = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='user_profile_backup'",
+        [],
+        |row| Ok(row.get::<_, i32>(0)? > 0)
+    )?;
+    
+    if !backup_table_exists {
+        conn.execute(
+            "CREATE TABLE user_profile_backup (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                name TEXT NOT NULL DEFAULT 'User',
+                bio TEXT DEFAULT 'Steam User', 
+                steam_id TEXT,
+                banner_path TEXT,
+                avatar_path TEXT,
+                created_at INTEGER DEFAULT 0,
+                updated_at INTEGER DEFAULT 0,
+                cached_at INTEGER DEFAULT 0,
+                expires_at INTEGER DEFAULT 0,
+                backup_created_at INTEGER DEFAULT 0,
+                backup_reason TEXT DEFAULT 'manual'
+            )",
+            [],
+        )?;
+        
+        // Create backup from existing profile data
+        let profile_exists: bool = conn.query_row(
+            "SELECT COUNT(*) FROM user_profile WHERE id = 1",
+            [],
+            |row| Ok(row.get::<_, i32>(0)? > 0)
+        )?;
+        
+        if profile_exists {
+            conn.execute(
+                "INSERT INTO user_profile_backup 
+                 (id, name, bio, steam_id, banner_path, avatar_path, created_at, updated_at, 
+                  cached_at, expires_at, backup_created_at, backup_reason)
+                 SELECT id, name, bio, steam_id, banner_path, avatar_path, created_at, updated_at,
+                        ?1, ?2, ?1, 'migration_v5'
+                 FROM user_profile WHERE id = 1",
+                [now, expires_in_year],
+            )?;
+        }
+    }
+    
     Ok(())
 }
 

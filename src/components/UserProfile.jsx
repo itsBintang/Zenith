@@ -63,17 +63,30 @@ function UserProfile({ onGameSelect, onBack, libraryState, onRefreshLibrary, onU
         if (!file) return;
         
         try {
+          console.log('Starting banner upload, file size:', file.size);
+          
           // Convert file to array buffer
           const arrayBuffer = await file.arrayBuffer();
           const uint8Array = new Uint8Array(arrayBuffer);
           
-          // Upload to backend
-          const imagePath = await invoke('upload_profile_image', {
+          console.log('Converted to array buffer, uploading banner...');
+          
+          // Upload to backend with timeout
+          const uploadPromise = invoke('upload_profile_image', {
             imageData: Array.from(uint8Array),
             imageType: 'banner'
           });
           
+          // 30 second timeout
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Upload timeout after 30 seconds')), 30000)
+          );
+          
+          const imagePath = await Promise.race([uploadPromise, timeoutPromise]);
+          console.log('Banner uploaded successfully:', imagePath);
+          
           // Reload profile to get updated data
+          console.log('Reloading profile data...');
           await loadProfile();
           
           // Refresh sidebar profile
@@ -81,10 +94,24 @@ function UserProfile({ onGameSelect, onBack, libraryState, onRefreshLibrary, onU
             onProfileUpdate();
           }
           
-          console.log('Banner uploaded successfully:', imagePath);
+          console.log('Banner upload completed successfully');
         } catch (error) {
           console.error('Failed to upload banner:', error);
-          alert('Failed to upload banner. Please try again.');
+          
+          // Show more specific error messages
+          let errorMessage = 'Failed to upload banner.';
+          if (error.message) {
+            if (error.message.includes('timeout')) {
+              errorMessage += ' Upload timed out. Please try with a smaller image.';
+            } else if (error.message.includes('too large')) {
+              errorMessage += ' Image file is too large. Maximum size is 10MB.';
+            } else {
+              errorMessage += ` Error: ${error.message}`;
+            }
+          }
+          errorMessage += ' Please try again.';
+          
+          alert(errorMessage);
         } finally {
           setIsUploading(false);
         }
@@ -114,17 +141,30 @@ function UserProfile({ onGameSelect, onBack, libraryState, onRefreshLibrary, onU
         }
         
         try {
+          console.log('Starting avatar upload, file size:', file.size);
+          
           // Convert file to array buffer
           const arrayBuffer = await file.arrayBuffer();
           const uint8Array = new Uint8Array(arrayBuffer);
           
-          // Upload to backend
-          const imagePath = await invoke('upload_profile_image', {
+          console.log('Converted to array buffer, uploading avatar...');
+          
+          // Upload to backend with timeout
+          const uploadPromise = invoke('upload_profile_image', {
             imageData: Array.from(uint8Array),
             imageType: 'avatar'
           });
           
+          // 30 second timeout
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Upload timeout after 30 seconds')), 30000)
+          );
+          
+          const imagePath = await Promise.race([uploadPromise, timeoutPromise]);
+          console.log('Avatar uploaded successfully:', imagePath);
+          
           // Reload profile to get updated data
+          console.log('Reloading profile data...');
           await loadProfile();
           
           // Refresh sidebar profile
@@ -132,10 +172,24 @@ function UserProfile({ onGameSelect, onBack, libraryState, onRefreshLibrary, onU
             onProfileUpdate();
           }
           
-          console.log('Avatar uploaded successfully:', imagePath);
+          console.log('Avatar upload completed successfully');
         } catch (error) {
           console.error('Failed to upload avatar:', error);
-          alert('Failed to upload avatar. Please try again.');
+          
+          // Show more specific error messages
+          let errorMessage = 'Failed to upload avatar.';
+          if (error.message) {
+            if (error.message.includes('timeout')) {
+              errorMessage += ' Upload timed out. Please try with a smaller image.';
+            } else if (error.message.includes('too large')) {
+              errorMessage += ' Image file is too large. Maximum size is 10MB.';
+            } else {
+              errorMessage += ` Error: ${error.message}`;
+            }
+          }
+          errorMessage += ' Please try again.';
+          
+          alert(errorMessage);
         } finally {
           setIsUploading(false);
         }

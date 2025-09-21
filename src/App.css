@@ -243,7 +243,7 @@ button:focus-visible {
   padding: 0;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   width: 100%;
   overflow: hidden;
 }
@@ -592,10 +592,17 @@ button:focus-visible {
 /* Steam Control Section */
 .ui-sidebar__steam-control {
   margin-top: auto;
-  padding: 16px 20px;
+  padding: 16px 20px 24px 20px;
   border-top: 1px solid #1f2023;
   background: rgba(0, 0, 0, 0.2);
   flex-shrink: 0;
+}
+
+/* Extra padding on Windows to avoid taskbar overlap */
+@media screen and (min-width: 1px) {
+  .ui-sidebar__steam-control {
+    padding-bottom: 28px;
+  }
 }
 
 .ui-btn--steam {
@@ -613,6 +620,7 @@ button:focus-visible {
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
+  margin-bottom: 4px;
 }
 
 .ui-btn--steam:hover:not(:disabled) {
@@ -878,4 +886,51 @@ button:focus-visible {
   color: #fff;
   border-color: rgba(255, 255, 255, 0.3);
   transform: translateY(-1px);
+}
+
+/* ====================== UNIFIED SCROLLBAR DESIGN ====================== */
+/* Global scrollbar styling - consistent across all pages */
+
+/* For Webkit browsers (Chrome, Edge, Safari) */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* For Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) rgba(255, 255, 255, 0.03);
+}
+
+/* Ensure all content areas use the unified scrollbar */
+.ui-main,
+.ui-content,
+.ui-page,
+.main-content,
+.home-container,
+.bypass-container,
+.bypass-content,
+.catalogue-container,
+.library-container,
+.library-games-list,
+.game-details__container,
+.content-sidebar,
+.changelog-content {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) rgba(255, 255, 255, 0.03);
 }

@@ -57,7 +57,7 @@ CREATE TABLE cache_metadata (
     updated_at INTEGER DEFAULT (strftime('%s', 'now'))
 );
 
--- User profile data
+-- User profile data with TTL and backup support
 CREATE TABLE user_profile (
     id INTEGER PRIMARY KEY DEFAULT 1, -- Single profile entry
     name TEXT NOT NULL DEFAULT 'User',
@@ -65,8 +65,28 @@ CREATE TABLE user_profile (
     steam_id TEXT,
     banner_path TEXT, -- Local file path to banner image
     avatar_path TEXT, -- Local file path to avatar image
-    created_at INTEGER DEFAULT (strftime('%s', 'now')),
-    updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+    created_at INTEGER DEFAULT 0,
+    updated_at INTEGER DEFAULT 0,
+    cached_at INTEGER DEFAULT 0,
+    expires_at INTEGER DEFAULT 0, -- TTL will be set programmatically
+    is_backed_up INTEGER DEFAULT 0, -- Backup flag
+    backup_created_at INTEGER DEFAULT 0
+);
+
+-- Profile backup table for recovery
+CREATE TABLE user_profile_backup (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    name TEXT NOT NULL DEFAULT 'User',
+    bio TEXT DEFAULT 'Steam User', 
+    steam_id TEXT,
+    banner_path TEXT,
+    avatar_path TEXT,
+    created_at INTEGER DEFAULT 0,
+    updated_at INTEGER DEFAULT 0,
+    cached_at INTEGER DEFAULT 0,
+    expires_at INTEGER DEFAULT 0,
+    backup_created_at INTEGER DEFAULT 0,
+    backup_reason TEXT DEFAULT 'manual' -- migration, corruption, manual, etc.
 );
 
 -- Bypass games data (static data with monthly TTL)

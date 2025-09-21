@@ -7,43 +7,47 @@ pub struct TtlConfig;
 impl TtlConfig {
     // ========== DYNAMIC DATA (TTL Sedang) ==========
     /// DLC List - can be updated with new releases but not that frequently
-    pub const DLC_LIST: i64 = 30 * 24 * 3600; // 30 days (increased from 3 days)
+    pub const DLC_LIST: i64 = 90 * 24 * 3600; // 90 days (more realistic for DLC updates)
     
     // ========== STATIC DATA (TTL Panjang) ==========
     /// Screenshots - rarely change unless major update
-    pub const SCREENSHOTS: i64 = 90 * 24 * 3600; // 90 days (increased from 30 days)
+    pub const SCREENSHOTS: i64 = 180 * 24 * 3600; // 180 days (6 months, very stable)
     
     /// Detailed descriptions - very stable content
-    pub const DETAILED_DESCRIPTION: i64 = 90 * 24 * 3600; // 90 days (increased from 30 days)
+    pub const DETAILED_DESCRIPTION: i64 = 180 * 24 * 3600; // 180 days (6 months, very stable)
     
     /// System requirements - only change with major updates
-    pub const SYSTEM_REQUIREMENTS: i64 = 180 * 24 * 3600; // 180 days (increased from 60 days)
+    pub const SYSTEM_REQUIREMENTS: i64 = 365 * 24 * 3600; // 1 year (almost never changes)
     
     /// Publisher - almost never changes
-    pub const PUBLISHER: i64 = 365 * 24 * 3600; // 1 year (permanent-like)
+    pub const PUBLISHER: i64 = 2 * 365 * 24 * 3600; // 2 years (permanent-like)
     
     /// Release date - never changes after release
-    pub const RELEASE_DATE: i64 = 365 * 24 * 3600; // 1 year (permanent-like)
+    pub const RELEASE_DATE: i64 = 2 * 365 * 24 * 3600; // 2 years (permanent-like)
     
     // ========== SEMI-STATIC DATA (TTL Sedang-Panjang) ==========
     /// Game name - can change but rarely
-    pub const GAME_NAME: i64 = 60 * 24 * 3600; // 60 days (increased from 30 days)
+    pub const GAME_NAME: i64 = 180 * 24 * 3600; // 180 days (6 months, rarely changes)
     
     /// Header image - updated occasionally
-    pub const HEADER_IMAGE: i64 = 60 * 24 * 3600; // 60 days (increased from 21 days)
+    pub const HEADER_IMAGE: i64 = 120 * 24 * 3600; // 120 days (4 months)
     
     /// Banner image - updated occasionally  
-    pub const BANNER_IMAGE: i64 = 60 * 24 * 3600; // 60 days (increased from 21 days)
+    pub const BANNER_IMAGE: i64 = 120 * 24 * 3600; // 120 days (4 months)
     
     /// Trailer - can be updated with major releases
-    pub const TRAILER: i64 = 60 * 24 * 3600; // 60 days (increased from 21 days)
+    pub const TRAILER: i64 = 120 * 24 * 3600; // 120 days (4 months)
     
     /// DRM notice - changes rarely but can happen
-    pub const DRM_NOTICE: i64 = 90 * 24 * 3600; // 90 days (increased from 60 days)
+    pub const DRM_NOTICE: i64 = 180 * 24 * 3600; // 180 days (6 months)
+    
+    // ========== PROFILE DATA ==========
+    /// Profile data - user-specific, should persist long
+    pub const PROFILE_DATA: i64 = 365 * 24 * 3600; // 1 year
     
     // ========== DEFAULT FALLBACK ==========
     /// Default TTL for unknown/mixed data
-    pub const DEFAULT: i64 = 30 * 24 * 3600; // 30 days (increased from 7 days)
+    pub const DEFAULT: i64 = 90 * 24 * 3600; // 90 days (much more reasonable default)
 }
 
 /// TTL categories for easier management
@@ -61,9 +65,9 @@ impl TtlCategory {
     /// Get appropriate TTL for the category
     pub fn default_ttl(&self) -> i64 {
         match self {
-            TtlCategory::Dynamic => 30 * 24 * 3600,      // 30 days (increased from 3 days)
-            TtlCategory::SemiStatic => 60 * 24 * 3600,   // 60 days (increased from 21 days)  
-            TtlCategory::Static => 90 * 24 * 3600,       // 90 days (increased from 60 days)
+            TtlCategory::Dynamic => 90 * 24 * 3600,      // 90 days (much more reasonable)
+            TtlCategory::SemiStatic => 120 * 24 * 3600,  // 120 days (4 months)  
+            TtlCategory::Static => 180 * 24 * 3600,      // 180 days (6 months)
         }
     }
     

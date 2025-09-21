@@ -314,6 +314,13 @@ pub async fn save_user_profile(profile: crate::database::models::UserProfile) ->
 pub async fn upload_profile_image(image_data: Vec<u8>, image_type: String) -> Result<String, String> {
     use crate::database::{DatabaseManager, operations::UserProfileOperations};
     
+    println!("Starting profile image upload - type: {}, size: {} bytes", image_type, image_data.len());
+    
+    // Validate image size (max 10MB)
+    if image_data.len() > 10 * 1024 * 1024 {
+        return Err("Image file too large. Maximum size is 10MB.".to_string());
+    }
+    
     // Validate image type
     let extension = match image_type.as_str() {
         "banner" => "banner.jpg",
@@ -321,18 +328,38 @@ pub async fn upload_profile_image(image_data: Vec<u8>, image_type: String) -> Re
         _ => return Err("Invalid image type. Use 'banner' or 'avatar'".to_string()),
     };
     
-    let profile_dir = get_profile_dir().map_err(|e| e.to_string())?;
+    println!("Getting profile directory...");
+    let profile_dir = get_profile_dir().map_err(|e| {
+        println!("Failed to get profile directory: {}", e);
+        e.to_string()
+    })?;
     let image_path = profile_dir.join(extension);
     
+    println!("Creating profile directory: {:?}", profile_dir);
     // Create profile directory if it doesn't exist
-    fs::create_dir_all(&profile_dir).map_err(|e| e.to_string())?;
+    fs::create_dir_all(&profile_dir).map_err(|e| {
+        println!("Failed to create profile directory: {}", e);
+        format!("Failed to create profile directory: {}", e)
+    })?;
     
+    println!("Writing image file to: {:?}", image_path);
     // Save image file
-    fs::write(&image_path, image_data).map_err(|e| e.to_string())?;
+    fs::write(&image_path, image_data).map_err(|e| {
+        println!("Failed to write image file: {}", e);
+        format!("Failed to save image file: {}", e)
+    })?;
     
+    println!("Image file saved successfully, updating database...");
     // Update database with new image path
-    let db_path = get_profile_db_path().map_err(|e| e.to_string())?;
-    let db_manager = DatabaseManager::new(db_path).map_err(|e| e.to_string())?;
+    let db_path = get_profile_db_path().map_err(|e| {
+        println!("Failed to get database path: {}", e);
+        e.to_string()
+    })?;
+    
+    let db_manager = DatabaseManager::new(db_path).map_err(|e| {
+        println!("Failed to create database manager: {}", e);
+        e.to_string()
+    })?;
     
     let field_name = match image_type.as_str() {
         "banner" => "banner_path",
@@ -340,10 +367,15 @@ pub async fn upload_profile_image(image_data: Vec<u8>, image_type: String) -> Re
         _ => return Err("Invalid image type".to_string()),
     };
     
+    println!("Updating database field: {}", field_name);
     db_manager.with_connection(|conn| {
         UserProfileOperations::update_field(conn, field_name, Some(&image_path.to_string_lossy().to_string()))
-    }).map_err(|e| e.to_string())?;
+    }).map_err(|e| {
+        println!("Failed to update database: {}", e);
+        format!("Database update failed: {}", e)
+    })?;
     
+    println!("Profile image upload completed successfully: {:?}", image_path);
     // Return the file path
     Ok(image_path.to_string_lossy().to_string())
 }

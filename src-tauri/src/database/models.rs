@@ -358,7 +358,7 @@ impl CacheMetadata {
     }
 }
 
-/// User profile data
+/// User profile data with TTL support
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserProfile {
     pub id: i32,
@@ -369,10 +369,14 @@ pub struct UserProfile {
     pub avatar_path: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
+    pub cached_at: i64,
+    pub expires_at: i64,
+    pub is_backed_up: bool,
+    pub backup_created_at: i64,
 }
 
 impl UserProfile {
-    /// Create new user profile
+    /// Create new user profile with TTL
     pub fn new(name: String, bio: Option<String>) -> Self {
         let now = Utc::now().timestamp();
         Self {
@@ -384,7 +388,30 @@ impl UserProfile {
             avatar_path: None,
             created_at: now,
             updated_at: now,
+            cached_at: now,
+            expires_at: now + 31536000, // 1 year (365 * 24 * 3600)
+            is_backed_up: false,
+            backup_created_at: 0,
         }
+    }
+
+    /// Check if profile is expired
+    pub fn is_expired(&self) -> bool {
+        Utc::now().timestamp() > self.expires_at
+    }
+
+    /// Refresh TTL
+    pub fn refresh_ttl(&mut self) {
+        let now = Utc::now().timestamp();
+        self.cached_at = now;
+        self.expires_at = now + 31536000; // 1 year (365 * 24 * 3600)
+        self.updated_at = now;
+    }
+
+    /// Mark as backed up
+    pub fn mark_backed_up(&mut self) {
+        self.is_backed_up = true;
+        self.backup_created_at = Utc::now().timestamp();
     }
 
     /// Convert from SQLite row
@@ -398,6 +425,10 @@ impl UserProfile {
             avatar_path: row.get(5)?,
             created_at: row.get(6)?,
             updated_at: row.get(7)?,
+            cached_at: row.get(8).unwrap_or_else(|_| Utc::now().timestamp()),
+            expires_at: row.get(9).unwrap_or_else(|_| Utc::now().timestamp() + 31536000), // 1 year
+            is_backed_up: row.get::<_, i32>(10).unwrap_or(0) == 1,
+            backup_created_at: row.get(11).unwrap_or(0),
         })
     }
 

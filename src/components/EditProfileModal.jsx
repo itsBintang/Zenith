@@ -80,7 +80,18 @@ function EditProfileModal({ isOpen, onClose, profile, onProfileUpdate }) {
   };
 
   const handleImageUpload = async (imageType) => {
+    if (isUploading) {
+      console.log('Upload already in progress, ignoring request');
+      return;
+    }
+    
     setIsUploading(true);
+    
+    // Fail-safe: reset uploading state after 60 seconds no matter what
+    const failsafeTimeout = setTimeout(() => {
+      console.warn('Upload fail-safe triggered - resetting upload state');
+      setIsUploading(false);
+    }, 60000);
     
     try {
       // Create file input element
@@ -110,28 +121,56 @@ function EditProfileModal({ isOpen, onClose, profile, onProfileUpdate }) {
         }
         
         try {
+          console.log(`Starting ${imageType} upload, file size:`, file.size);
+          
           // Convert file to array buffer
           const arrayBuffer = await file.arrayBuffer();
           const uint8Array = new Uint8Array(arrayBuffer);
           
-          // Upload to backend
-          const imagePath = await invoke('upload_profile_image', {
+          console.log(`Converted to array buffer, uploading ${imageType}...`);
+          
+          // Upload to backend with timeout
+          const uploadPromise = invoke('upload_profile_image', {
             imageData: Array.from(uint8Array),
             imageType: imageType
           });
           
+          // 30 second timeout
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Upload timeout after 30 seconds')), 30000)
+          );
+          
+          const imagePath = await Promise.race([uploadPromise, timeoutPromise]);
+          console.log(`${imageType} uploaded successfully:`, imagePath);
+          
           // Update preview
+          console.log(`Loading updated ${imageType} preview...`);
           const newBase64 = await invoke('get_profile_image_base64', { imageType: imageType });
           setPreviewImages(prev => ({
             ...prev,
             [imageType]: newBase64
           }));
           
-          console.log(`${imageType} uploaded successfully:`, imagePath);
+          console.log(`${imageType} upload completed successfully`);
         } catch (error) {
           console.error(`Failed to upload ${imageType}:`, error);
-          alert(`Failed to upload ${imageType}. Please try again.`);
+          
+          // Show more specific error messages
+          let errorMessage = `Failed to upload ${imageType}.`;
+          if (error.message) {
+            if (error.message.includes('timeout')) {
+              errorMessage += ' Upload timed out. Please try with a smaller image.';
+            } else if (error.message.includes('too large')) {
+              errorMessage += ' Image file is too large. Maximum size is 10MB.';
+            } else {
+              errorMessage += ` Error: ${error.message}`;
+            }
+          }
+          errorMessage += ' Please try again.';
+          
+          alert(errorMessage);
         } finally {
+          clearTimeout(failsafeTimeout);
           setIsUploading(false);
         }
       };
@@ -139,6 +178,7 @@ function EditProfileModal({ isOpen, onClose, profile, onProfileUpdate }) {
       input.click();
     } catch (error) {
       console.error('Error opening file dialog:', error);
+      clearTimeout(failsafeTimeout);
       setIsUploading(false);
     }
   };
@@ -222,7 +262,9 @@ function EditProfileModal({ isOpen, onClose, profile, onProfileUpdate }) {
                     disabled={isUploading || isSaving}
                   >
                     <FiUpload size={16} />
-                    <span>{isUploading ? 'Uploading...' : 'Upload Banner'}</span>
+                    <span>
+                      {isUploading ? 'Uploading... Please wait' : 'Upload Banner'}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -244,7 +286,9 @@ function EditProfileModal({ isOpen, onClose, profile, onProfileUpdate }) {
                     disabled={isUploading || isSaving}
                   >
                     <FiUpload size={16} />
-                    <span>{isUploading ? 'Uploading...' : 'Upload Avatar'}</span>
+                    <span>
+                      {isUploading ? 'Uploading... Please wait' : 'Upload Avatar'}
+                    </span>
                   </button>
                 </div>
               </div>

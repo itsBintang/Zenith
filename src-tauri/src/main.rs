@@ -1667,16 +1667,18 @@ async fn check_steam_status() -> Result<bool, String> {
 
 #[command]
 async fn get_game_dlc_list(app_id: String) -> Result<Vec<String>, String> {
-    println!("Fetching DLC list for game: {}", app_id);
+    // DLC list logging reduced to prevent spam
+    // println!("Fetching DLC list for game: {}", app_id);
 
     // Check if we have cached game details with DLC
     if let Some(cached_details) = GAME_CACHE.get_game_details(&app_id).await {
         if !cached_details.dlc.is_empty() {
-            println!(
-                "Found {} cached DLCs for game {}",
-                cached_details.dlc.len(),
-                app_id
-            );
+            // Cached DLC logging reduced to prevent spam
+            // println!(
+            //     "Found {} cached DLCs for game {}",
+            //     cached_details.dlc.len(),
+            //     app_id
+            // );
             return Ok(cached_details.dlc);
         }
     }
@@ -1686,7 +1688,8 @@ async fn get_game_dlc_list(app_id: String) -> Result<Vec<String>, String> {
         "https://store.steampowered.com/api/appdetails?appids={}",
         app_id
     );
-    println!("Fetching DLC data from Steam API for: {}", app_id);
+    // Only log actual API calls, not cache hits
+    // println!("Fetching DLC data from Steam API for: {}", app_id);
 
     let resp = HTTP_CLIENT
         .get(&url)
@@ -1737,7 +1740,8 @@ async fn get_game_dlc_list(app_id: String) -> Result<Vec<String>, String> {
 
 #[command]
 async fn get_batch_game_details(app_ids: Vec<String>) -> Result<Vec<GameDetail>, String> {
-    println!("Fetching batch details for {} DLCs", app_ids.len());
+    // Batch details logging reduced to prevent spam
+    // println!("Fetching batch details for {} DLCs", app_ids.len());
     let mut details_list = Vec::new();
     let mut cache_hits = 0;
     let mut api_calls = 0;
@@ -1770,12 +1774,13 @@ async fn get_batch_game_details(app_ids: Vec<String>) -> Result<Vec<GameDetail>,
         }
     }
 
-    println!(
-        "Batch DLC fetch completed: {} cache hits, {} API calls, {} total results",
-        cache_hits,
-        api_calls,
-        details_list.len()
-    );
+    // Batch completion logging reduced to prevent spam
+    // println!(
+    //     "Batch DLC fetch completed: {} cache hits, {} API calls, {} total results",
+    //     cache_hits,
+    //     api_calls,
+    //     details_list.len()
+    // );
     GAME_CACHE.cache_stats();
     Ok(details_list)
 }
@@ -1800,11 +1805,12 @@ async fn get_dlcs_in_lua(app_id: String) -> Result<Vec<String>, String> {
         .filter(|id| *id != app_id) // Exclude the main game's ID
         .collect();
 
-    println!(
-        "Found {} installed DLCs for game {}",
-        installed_dlcs.len(),
-        app_id
-    );
+    // DLC installation logging reduced to prevent spam
+    // println!(
+    //     "Found {} installed DLCs for game {}",
+    //     installed_dlcs.len(),
+    //     app_id
+    // );
     Ok(installed_dlcs)
 }
 
@@ -1901,6 +1907,67 @@ async fn sync_dlcs_in_lua(
 async fn clear_cache() -> Result<String, String> {
     GAME_CACHE.clear_all();
     Ok("Cache cleared successfully".to_string())
+}
+
+#[command]
+async fn refresh_dlc_cache(app_id: String) -> Result<String, String> {
+    // Force clear the specific game's DLC cache
+    GAME_CACHE.invalidate_game_details(&app_id);
+    
+    // Fetch fresh DLC data from Steam API
+    let url = format!(
+        "https://store.steampowered.com/api/appdetails?appids={}",
+        app_id
+    );
+    
+    let resp = HTTP_CLIENT
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch from Steam API: {}", e))?;
+        
+    if !resp.status().is_success() {
+        return Err(format!("Steam API returned status {}", resp.status()));
+    }
+
+    let v: serde_json::Value = resp.json().await
+        .map_err(|e| format!("Failed to parse Steam API response: {}", e))?;
+        
+    let data = v
+        .get(&app_id)
+        .and_then(|x| x.get("data"))
+        .ok_or("No data found in Steam API response")?;
+
+    // Extract DLC information
+    let dlc = if let Some(dlc_data) = data.get("dlc") {
+        match dlc_data {
+            serde_json::Value::Array(arr) => arr
+                .iter()
+                .filter_map(|v| v.as_u64())
+                .map(|id| id.to_string())
+                .collect(),
+            serde_json::Value::Object(obj) => obj
+                .values()
+                .filter_map(|v| v.as_u64())
+                .map(|id| id.to_string())
+                .collect(),
+            _ => Vec::new(),
+        }
+    } else {
+        Vec::new()
+    };
+
+    if !dlc.is_empty() {
+        // Update cached game details with fresh DLC info
+        if let Some(mut cached_details) = GAME_CACHE.get_game_details(&app_id).await {
+            cached_details.dlc = dlc.clone();
+            GAME_CACHE.set_game_details(app_id.clone(), cached_details);
+        }
+        
+        Ok(format!("Successfully refreshed {} DLCs for game {}", dlc.len(), app_id))
+    } else {
+        Ok(format!("No DLCs found for game {}", app_id))
+    }
 }
 
 #[command]
@@ -2324,6 +2391,7 @@ fn main() {
             get_dlcs_in_lua,
             sync_dlcs_in_lua,
             clear_cache,
+            refresh_dlc_cache,
             refresh_cache_background,
             remove_game,
             commands::update_game_files,

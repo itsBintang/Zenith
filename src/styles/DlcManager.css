@@ -54,11 +54,52 @@
   background: rgba(139, 69, 255, 0.05);
 }
 
-.dlc-manager-header h2 {
+.dlc-manager-header-left h2 {
   margin: 0;
   font-size: 1.25rem;
   font-weight: 600;
   color: #fff;
+}
+
+.dlc-manager-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.dlc-refresh-btn {
+  background: none;
+  border: 1px solid #444;
+  color: #ccc;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 36px;
+}
+
+.dlc-refresh-btn:hover:not(:disabled) {
+  background: #333;
+  color: #fff;
+  border-color: #555;
+}
+
+.dlc-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dlc-refresh-btn.loading svg {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .dlc-close-btn {

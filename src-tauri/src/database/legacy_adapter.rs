@@ -97,6 +97,12 @@ impl LegacyGameCacheAdapter {
         }
     }
 
+    pub fn invalidate_game_details(&self, app_id: &str) {
+        if let Err(e) = self.sqlite_service.invalidate_game_details(app_id) {
+            eprintln!("Failed to invalidate game details for {}: {}", app_id, e);
+        }
+    }
+
     // Additional compatibility methods for circuit breaker
     pub async fn is_circuit_breaker_open(&self) -> bool {
         self.sqlite_service.is_circuit_breaker_open().await

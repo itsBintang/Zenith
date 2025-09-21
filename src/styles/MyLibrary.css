@@ -77,17 +77,8 @@
   padding: 0 12px;
 }
 
-/* Custom scrollbar for library */
-.library-games-list::-webkit-scrollbar {
-  width: 4px;
-}
-.library-games-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-.library-games-list::-webkit-scrollbar-thumb {
-  background: #444;
-  border-radius: 2px;
-}
+/* Scrollbar styling removed - using global unified scrollbar from App.css */
+/* .library-games-list inherits global scrollbar styling for consistency */
 
 .library-message {
   padding: 1rem;

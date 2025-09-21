@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { FiX, FiLoader, FiChevronLeft, FiChevronRight, FiCheck, FiPlus, FiMinus, FiLock } from 'react-icons/fi';
+import { FiX, FiLoader, FiChevronLeft, FiChevronRight, FiCheck, FiPlus, FiMinus, FiLock, FiRefreshCw } from 'react-icons/fi';
 import '../styles/DlcManager.css';
 
 function DlcManager({ game, onClose, showNotification }) {
@@ -10,6 +10,7 @@ function DlcManager({ game, onClose, showNotification }) {
   const [selectedDlcs, setSelectedDlcs] = useState(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const dlcsPerPage = 8;
@@ -23,16 +24,20 @@ function DlcManager({ game, onClose, showNotification }) {
         // Get all DLC AppIDs using dedicated command
         const allIds = await invoke('get_game_dlc_list', { appId: game.app_id });
 
-        if (allIds.length === 0) {
+        // Validate and sanitize DLC IDs
+        const validIds = Array.isArray(allIds) ? allIds.filter(id => id && (typeof id === 'string' || typeof id === 'number')).map(id => String(id)) : [];
+        
+        if (validIds.length === 0) {
           setError('This game has no available DLCs.');
           setIsLoading(false);
           return;
         }
-        setAllDlcAppIds(allIds);
+        setAllDlcAppIds(validIds);
 
         // Get currently installed DLCs
         const installed = await invoke('get_dlcs_in_lua', { appId: game.app_id });
-        const installedSet = new Set(installed);
+        const validInstalled = Array.isArray(installed) ? installed.filter(id => id && (typeof id === 'string' || typeof id === 'number')).map(id => String(id)) : [];
+        const installedSet = new Set(validInstalled);
         setInstalledDlcs(installedSet);
         setSelectedDlcs(new Set(installedSet)); // Clone for editing
         
@@ -64,9 +69,21 @@ function DlcManager({ game, onClose, showNotification }) {
 
       try {
         const dlcDetails = await invoke('get_batch_game_details', { appIds: pageAppIds });
-        setDlcs(dlcDetails);
+        
+        // Validate and sanitize DLC details
+        const sanitizedDetails = dlcDetails.filter(dlc => dlc && dlc.app_id).map(dlc => ({
+          app_id: String(dlc.app_id || ''),
+          name: String(dlc.name || 'Unknown DLC'),
+          header_image: String(dlc.header_image || ''),
+          // Add other fields as needed, ensuring they're all strings
+        }));
+        
+        setDlcs(sanitizedDetails);
       } catch (err) {
+        console.error('Error fetching DLC details:', err);
         setError(`Failed to load DLC details: ${err.toString()}`);
+        // Set empty array as fallback
+        setDlcs([]);
       } finally {
         setIsLoading(false);
       }
@@ -74,6 +91,44 @@ function DlcManager({ game, onClose, showNotification }) {
 
     fetchDlcPageDetails();
   }, [currentPage, allDlcAppIds]);
+
+  // Refresh DLC cache and reload data
+  const refreshDlcCache = async () => {
+    try {
+      setIsRefreshing(true);
+      setError(null);
+      
+      // Force refresh DLC cache from Steam API
+      await invoke('refresh_dlc_cache', { appId: game.app_id });
+      console.log('DLC cache refreshed from Steam API');
+      
+      // Reload DLC data
+      const allIds = await invoke('get_game_dlc_list', { appId: game.app_id });
+      
+      // Validate DLC IDs are strings
+      const validIds = Array.isArray(allIds) ? allIds.filter(id => id && typeof id === 'string' || typeof id === 'number').map(id => String(id)) : [];
+      setAllDlcAppIds(validIds);
+      
+      // Reset to first page
+      setCurrentPage(1);
+      
+      // Get currently installed DLCs
+      const installed = await invoke('get_dlcs_in_lua', { appId: game.app_id });
+      const validInstalled = Array.isArray(installed) ? installed.filter(id => id && typeof id === 'string' || typeof id === 'number').map(id => String(id)) : [];
+      const installedSet = new Set(validInstalled);
+      setInstalledDlcs(installedSet);
+      setSelectedDlcs(new Set(installedSet));
+      
+      showNotification?.(`Successfully refreshed ${allIds.length} DLCs for ${game.name}`, 'success');
+    } catch (error) {
+      console.error('Error refreshing DLC cache:', error);
+      const errorMessage = typeof error === 'string' ? error : error.toString();
+      setError(`Failed to refresh DLC cache: ${errorMessage}`);
+      showNotification?.(errorMessage, 'error');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const handleToggleDlc = (dlcId) => {
     setSelectedDlcs(prev => {
@@ -153,10 +208,22 @@ function DlcManager({ game, onClose, showNotification }) {
       <div className="dlc-manager-modal">
         {/* Header */}
         <div className="dlc-manager-header">
-          <h2>DLC Unlocker</h2>
-          <button onClick={onClose} className="dlc-close-btn">
-            <FiX size={24} />
-          </button>
+          <div className="dlc-manager-header-left">
+            <h2>DLC Unlocker</h2>
+          </div>
+          <div className="dlc-manager-header-right">
+            <button 
+              className={`dlc-refresh-btn ${isRefreshing ? 'loading' : ''}`}
+              onClick={refreshDlcCache}
+              disabled={isRefreshing || isLoading || isSaving}
+              title="Refresh DLC cache from Steam API"
+            >
+              <FiRefreshCw size={16} />
+            </button>
+            <button onClick={onClose} className="dlc-close-btn">
+              <FiX size={24} />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
@@ -211,17 +278,21 @@ function DlcManager({ game, onClose, showNotification }) {
 
               {/* DLC Grid */}
               <div className="dlc-grid">
-                {dlcs.map(dlc => {
-                  const dlcIdStr = dlc.app_id;
+                {Array.isArray(dlcs) && dlcs.map(dlc => {
+                  // Ensure all data is properly formatted and not objects
+                  const dlcIdStr = String(dlc.app_id || '');
+                  const dlcName = String(dlc.name || 'Unknown DLC');
+                  const dlcImage = String(dlc.header_image || '');
+                  
                   const isSelected = selectedDlcs.has(dlcIdStr);
                   const wasInstalled = installedDlcs.has(dlcIdStr);
                   const isLocked = !wasInstalled && !isSelected;
 
                   return (
                     <div 
-                      key={dlc.app_id} 
+                      key={dlcIdStr} 
                       className={`dlc-card ${isSelected ? 'selected' : ''} ${isLocked ? 'locked' : ''}`}
-                      onClick={() => handleToggleDlc(dlc.app_id)}
+                      onClick={() => handleToggleDlc(dlcIdStr)}
                     >
                       {/* Selection Indicator */}
                       <div className="dlc-selection-indicator">
@@ -237,17 +308,17 @@ function DlcManager({ game, onClose, showNotification }) {
                       {/* DLC Image */}
                       <div className="dlc-card-image">
                         <img 
-                          src={dlc.header_image} 
-                          alt={dlc.name}
+                          src={dlcImage} 
+                          alt={dlcName}
                           onError={(e) => {
-                            e.target.src = `https://cdn.cloudflare.steamstatic.com/steam/apps/${dlc.app_id}/header.jpg`;
+                            e.target.src = `https://cdn.cloudflare.steamstatic.com/steam/apps/${dlcIdStr}/header.jpg`;
                           }}
                         />
                         {/* Title overlay */}
                         <div className="dlc-card-gradient"></div>
-                        <div className="dlc-card-title-overlay">{dlc.name}</div>
+                        <div className="dlc-card-title-overlay">{dlcName}</div>
                         {isLocked && (
-                          <div className="dlc-card-subtitle-overlay">ID: {dlc.app_id}</div>
+                          <div className="dlc-card-subtitle-overlay">ID: {dlcIdStr}</div>
                         )}
                       </div>
 

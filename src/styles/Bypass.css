@@ -110,25 +110,8 @@
   overflow-x: hidden;
 }
 
-/* Custom Scrollbar Styling */
-.bypass-content::-webkit-scrollbar {
-  width: 8px;
-}
-
-.bypass-content::-webkit-scrollbar-track {
-  background: #0d1117;
-  border-radius: 4px;
-}
-
-.bypass-content::-webkit-scrollbar-thumb {
-  background: #30363d;
-  border-radius: 4px;
-  transition: background-color 0.2s ease;
-}
-
-.bypass-content::-webkit-scrollbar-thumb:hover {
-  background: #484f58;
-}
+/* Scrollbar styling removed - using global unified scrollbar from App.css */
+/* .bypass-content inherits global scrollbar styling for consistency */
 
 .bypass-loading, .bypass-empty {
   display: flex;
