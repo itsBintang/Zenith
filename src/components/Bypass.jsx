@@ -600,7 +600,7 @@ function Bypass() {
                           {bypassProgress.progress >= 60 ? <FiCheck size={16} /> : 
                            bypassProgress.progress >= 30 ? <div className="spinner-small"></div> : '4'}
                         </div>
-                        <span className="step-label">Downloading<br/>Bypass</span>
+                        <span className="step-label">Downloading Bypass</span>
                       </div>
 
                       {/* Step 5: Extracting Files */}
