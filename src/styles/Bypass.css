@@ -152,6 +152,777 @@
   gap: 1rem;
 }
 
+/* =================== DENUVO-STYLE MODAL =================== */
+
+/* Modal Overlay */
+.denuvo-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Main Modal */
+.denuvo-activation-modal {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  width: 95%;
+  max-width: 800px;
+  height: auto;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7);
+  animation: slideIn 0.3s ease-out;
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Header */
+.denuvo-header {
+  position: relative;
+  padding: 20px 24px;
+  border-bottom: 1px solid #2a2a2a;
+  background: #1a1a1a;
+}
+
+.denuvo-header-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #fff;
+  margin: 0 0 4px 0;
+}
+
+.denuvo-header-subtitle {
+  font-size: 0.875rem;
+  color: #888;
+  margin: 0;
+}
+
+.denuvo-close-btn {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.denuvo-close-btn:hover {
+  background: #333;
+  color: #fff;
+}
+
+/* Content */
+.denuvo-content {
+  padding: 24px 32px 20px 32px;
+  text-align: center;
+  flex: 1;
+  background: #1a1a1a;
+}
+
+/* Shield Icon */
+.denuvo-shield-icon {
+  margin-bottom: 12px;
+}
+
+.denuvo-shield-icon svg {
+  color: #4a9eff;
+  filter: drop-shadow(0 0 8px rgba(74, 158, 255, 0.3));
+}
+
+/* Title */
+.denuvo-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #fff;
+  margin: 0 0 12px 0;
+}
+
+/* Description */
+.denuvo-description {
+  color: #b3b3b3;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  margin: 0 0 16px 0;
+  max-width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Game Card */
+.denuvo-game-card {
+  background: #262626;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  text-align: left;
+  margin: 16px 0;
+}
+
+.denuvo-game-image {
+  width: 120px;
+  height: 80px;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.denuvo-game-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.denuvo-game-info {
+  flex: 1;
+}
+
+.denuvo-game-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #fff;
+  margin: 0 0 4px 0;
+}
+
+.denuvo-game-appid,
+.denuvo-game-platform {
+  font-size: 0.9rem;
+  color: #888;
+  margin: 2px 0;
+}
+
+/* Status Section */
+.denuvo-status-section {
+  text-align: left;
+  margin: 16px 0;
+  padding: 12px;
+  background: #262626;
+  border-radius: 8px;
+  border: 1px solid #333;
+}
+
+.denuvo-status-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #fff;
+  margin: 0 0 8px 0;
+}
+
+.denuvo-status-tabs {
+  margin-bottom: 8px;
+}
+
+.denuvo-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #333;
+  border-radius: 6px;
+  color: #aaa;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.denuvo-tab.active {
+  background: #4a90e2;
+  color: #fff;
+}
+
+.denuvo-tab:not(.active) {
+  background: #333;
+  color: #999;
+  margin-left: 8px;
+}
+
+.denuvo-status-description {
+  color: #b3b3b3;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* Automation Section */
+.denuvo-automation-section {
+  text-align: left;
+  margin: 16px 0;
+}
+
+.denuvo-automation-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #fff;
+  margin: 0 0 8px 0;
+}
+
+.denuvo-automation-description {
+  color: #b3b3b3;
+  font-size: 0.9rem;
+  margin: 0 0 12px 0;
+}
+
+/* Status Items */
+.denuvo-status-items {
+  background: #1e1e1e;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.denuvo-status-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.denuvo-status-item:last-child {
+  border-bottom: none;
+}
+
+.denuvo-status-label {
+  color: #b3b3b3;
+  font-size: 0.9rem;
+}
+
+.denuvo-status-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.denuvo-status-value.success {
+  color: #4ade80;
+}
+
+.denuvo-status-value.pending {
+  color: #fbbf24;
+}
+
+/* Warning Box */
+.denuvo-warning-box {
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid #fbbf24;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 16px 0;
+  text-align: left;
+}
+
+.denuvo-warning-box p {
+  color: #fbbf24;
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+/* Path Value */
+.denuvo-path-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.denuvo-status-value.path {
+  color: #888;
+  font-family: 'Courier New', monospace;
+  font-size: 0.8rem;
+  background: #1e1e1e;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid #2a2a2a;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manual-path-indicator {
+  color: #4ade80;
+  font-weight: 500;
+  font-size: 0.75rem;
+}
+
+.browse-path-btn {
+  background: #333;
+  color: #ccc;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.browse-path-btn:hover {
+  background: #444;
+  border-color: #555;
+  color: #fff;
+}
+
+  .denuvo-status-value.validating {
+    color: #ffa500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .denuvo-status-value.success {
+    color: #4caf50;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  
+  .denuvo-status-value.error {
+    color: #f44336;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  
+  .spinner.small {
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 165, 0, 0.3);
+    border-top: 2px solid #ffa500;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
+  /* Bypass Progress Section (dalam modal yang sama) */
+.bypass-progress-section {
+  margin-top: 24px;
+}
+
+.progress-section-title {
+  color: #e0e0e0;
+  font-size: 0.8rem;
+  margin: 0 0 10px 0;
+  text-align: left;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.activation-steps-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #1e1e1e;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  padding: 16px 20px;
+}
+
+.activation-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.step-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.75rem;
+  margin-bottom: 6px;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.step-circle.pending {
+  background: #2c2c2c;
+  color: #555;
+  border: 2px solid #383838;
+}
+
+.step-circle.active {
+  background: #4a90e2;
+  color: #fff;
+  border: 2px solid #4a90e2;
+  box-shadow: 0 0 15px rgba(74, 144, 226, 0.4);
+}
+
+.step-circle.completed {
+  background: #4caf50;
+  color: #fff;
+  border: 2px solid #4caf50;
+  box-shadow: 0 0 10px rgba(76, 175, 80, 0.3);
+}
+
+.step-label {
+  color: #888;
+  font-size: 0.6rem;
+  text-align: center;
+  line-height: 1.2;
+  max-width: 50px;
+  word-wrap: break-word;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+
+/* Responsive untuk progress section */
+@media (max-width: 768px) {
+  .progress-section-title {
+    font-size: 0.8rem;
+    margin-bottom: 8px;
+  }
+  
+  .activation-steps-container {
+    padding: 12px;
+    gap: 6px;
+  }
+  
+  .step-circle {
+    width: 28px;
+    height: 28px;
+    font-size: 0.7rem;
+    margin-bottom: 4px;
+  }
+  
+  .step-label {
+    font-size: 0.55rem;
+    max-width: 50px;
+  }
+}
+
+@media (max-width: 480px) {
+  .activation-steps-container {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+    padding: 16px 12px;
+  }
+  
+  .activation-step {
+    flex: 0 0 calc(33.333% - 8px);
+    margin-bottom: 12px;
+  }
+
+  .step-label {
+    font-size: 0.55rem;
+  }
+}
+
+/* Bypass Activation Progress Modal */
+.bypass-activation-progress-modal {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  padding: 32px;
+  max-width: 900px;
+  width: 90%;
+  position: relative;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+}
+
+.bypass-activation-progress-modal h2 {
+  color: #fff;
+  font-size: 1.5rem;
+  margin: 0 0 32px 0;
+  text-align: center;
+  font-weight: 600;
+}
+
+.activation-steps {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 32px;
+  gap: 16px;
+  flex-wrap: nowrap;
+}
+
+.activation-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.step-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 8px;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.step-circle.pending {
+  background: #333;
+  color: #666;
+  border: 2px solid #444;
+}
+
+.step-circle.active {
+  background: #4a90e2;
+  color: #fff;
+  border: 2px solid #4a90e2;
+  box-shadow: 0 0 20px rgba(74, 144, 226, 0.4);
+}
+
+.step-circle.completed {
+  background: #4caf50;
+  color: #fff;
+  border: 2px solid #4caf50;
+  box-shadow: 0 0 15px rgba(76, 175, 80, 0.3);
+}
+
+.step-label {
+  color: #ccc;
+  font-size: 0.8rem;
+  text-align: center;
+  line-height: 1.2;
+  max-width: 80px;
+  word-wrap: break-word;
+}
+
+.spinner-small {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid #fff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.current-step-info {
+  background: #262626;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+}
+
+.current-step-text {
+  color: #fff;
+  font-size: 1rem;
+  margin: 0 0 8px 0;
+  font-weight: 500;
+}
+
+.progress-percentage {
+  color: #4a90e2;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .bypass-activation-progress-modal {
+    padding: 24px 16px;
+    max-width: 95%;
+  }
+  
+  .activation-steps {
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+  
+  .step-circle {
+    width: 40px;
+    height: 40px;
+    font-size: 0.8rem;
+  }
+  
+  .step-label {
+    font-size: 0.7rem;
+    max-width: 60px;
+  }
+  
+  .current-step-info {
+    padding: 16px;
+  }
+  
+  .current-step-text {
+    font-size: 0.9rem;
+  }
+  
+  .progress-percentage {
+    font-size: 1.1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .activation-steps {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+  }
+  
+  .activation-step {
+    flex: 0 0 calc(33.333% - 8px);
+    margin-bottom: 16px;
+  }
+  
+  .step-circle {
+    width: 36px;
+    height: 36px;
+    font-size: 0.75rem;
+  }
+  
+  .step-label {
+    font-size: 0.65rem;
+    max-width: 50px;
+  }
+}
+
+/* Bottom Activate Button */
+.denuvo-activate-btn-bottom {
+  background: #4ade80;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 14px 32px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  width: 100%;
+  margin-top: 20px;
+}
+
+.denuvo-activate-btn-bottom:hover {
+  background: #22c55e;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(74, 222, 128, 0.3);
+}
+
+.denuvo-activate-btn-bottom.disabled {
+  background: #666;
+  color: #999;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.denuvo-activate-btn-bottom.disabled:hover {
+  background: #666;
+  transform: none;
+  box-shadow: none;
+}
+
+.denuvo-activate-btn-bottom:active {
+  transform: translateY(0);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .denuvo-activation-modal {
+    width: 98%;
+    max-width: 95vw;
+    margin: 10px;
+  }
+  
+  .denuvo-content {
+    padding: 24px 16px;
+  }
+  
+  .denuvo-game-card {
+    flex-direction: column;
+    text-align: center;
+    gap: 12px;
+  }
+  
+  .denuvo-game-image {
+    width: 100px;
+    height: 70px;
+  }
+  
+  .denuvo-status-item {
+    flex-direction: column;
+    gap: 4px;
+    text-align: center;
+  }
+  
+  .denuvo-activate-btn-bottom {
+    padding: 16px 24px;
+  }
+  
+  .denuvo-path-container {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+  
+  .denuvo-status-value.path {
+    max-width: none;
+    font-size: 0.7rem;
+  }
+  
+  .browse-path-btn {
+    align-self: flex-end;
+    padding: 3px 6px;
+    font-size: 0.7rem;
+  }
+}
+
 /* Game Card */
 .bypass-game-card {
   position: relative;

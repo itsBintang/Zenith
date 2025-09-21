@@ -77,12 +77,12 @@ pub async fn check_bypass_installed(app_id: &str) -> Result<bool, String> {
 }
 
 #[command]
-pub async fn install_bypass(app_id: String, window: tauri::Window) -> Result<BypassResult, String> {
-    install_bypass_with_type(app_id, None, window).await
+pub async fn install_bypass(app_id: String, manual_game_path: Option<String>, window: tauri::Window) -> Result<BypassResult, String> {
+    install_bypass_with_type(app_id, None, manual_game_path, window).await
 }
 
 #[command]
-pub async fn install_bypass_with_type(app_id: String, _bypass_type: Option<u8>, window: tauri::Window) -> Result<BypassResult, String> {
+pub async fn install_bypass_with_type(app_id: String, _bypass_type: Option<u8>, manual_game_path: Option<String>, window: tauri::Window) -> Result<BypassResult, String> {
     // Check if bypass is already installed
     let is_reinstall = check_bypass_installed(&app_id).await.unwrap_or(false);
 
@@ -120,13 +120,20 @@ pub async fn install_bypass_with_type(app_id: String, _bypass_type: Option<u8>, 
 
     // Step 2: Validate game installation
     emit_progress("Validating game installation...", 20.0);
-    let game_folder = find_game_folder_from_acf(&app_id, &steam_path)
-        .await
-        .ok_or_else(|| "Game not found in Steam library or not fully installed".to_string())?;
-    println!("📁 Found game folder: {}", game_folder);
-
-    let game_path = format!("{}/steamapps/common/{}", steam_path, game_folder);
-    println!("🎯 Full game path: {}", game_path);
+    
+    let game_path = if let Some(manual_path) = manual_game_path {
+        println!("📁 Using manual game path: {}", manual_path);
+        manual_path
+    } else {
+        let game_folder = find_game_folder_from_acf(&app_id, &steam_path)
+            .await
+            .ok_or_else(|| "Game not found in Steam library or not fully installed".to_string())?;
+        println!("📁 Found game folder: {}", game_folder);
+        
+        let path = format!("{}/steamapps/common/{}", steam_path, game_folder);
+        println!("🎯 Auto-detected game path: {}", path);
+        path
+    };
 
     if !Path::new(&game_path).exists() {
         let error_msg = format!("Game directory does not exist: {}", game_path);
