@@ -37,9 +37,9 @@
                                  "providerShortName":  null,
                                  "signingIdentity":  null
                              },
-                   "resources":  [
+                     "resources":  [
 
-                                 ],
+                               ],
                    "shortDescription":  "Modern Steam game launcher",
                    "linux":  {
                                  "deb":  {

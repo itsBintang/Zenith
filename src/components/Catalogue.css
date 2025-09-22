@@ -187,37 +187,144 @@
   min-width: 280px;
   background-color: var(--sidebar-bg);
   border-radius: 8px;
-  padding: 20px;
+  padding: 20px 20px 10px 20px;
   overflow-y: auto;
+  height: fit-content;
+  max-height: 80vh;
 }
 
+/* Active Filters */
+.active-filters {
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.active-filters__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.active-filters__header h4 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-color);
+}
+
+.clear-all-btn {
+  background: none;
+  border: none;
+  color: var(--accent-color);
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  margin-left: auto;
+}
+
+.clear-all-btn:hover {
+  opacity: 0.8;
+}
+
+.filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filter-pill {
+  display: flex;
+  align-items: center;
+  background-color: rgba(138, 43, 226, 0.1);
+  border: 1px solid rgba(138, 43, 226, 0.3);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  color: var(--text-color);
+}
+
+.filter-pill__orb {
+  width: 8px;
+  height: 8px;
+  background-color: #8A2BE2;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+.filter-pill__remove {
+  background: none;
+  border: none;
+  color: var(--text-color);
+  margin-left: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  padding: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.filter-pill__remove:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Filter Section */
 .filter-section {
-  margin-bottom: 25px;
+  margin-bottom: 0;
+}
+
+.filter-section__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.filter-section__orb {
+  width: 10px;
+  height: 10px;
+  background-color: #8A2BE2;
+  border-radius: 50%;
 }
 
 .filter-section h4 {
   font-size: 1rem;
   font-weight: 600;
-  margin: 0 0 5px 0;
-  display: flex;
-  align-items: center;
+  margin: 0;
+  color: var(--text-color);
 }
 
-.filter-section h4 .dot {
-  width: 8px;
-  height: 8px;
-  background-color: var(--accent-color);
-  border-radius: 50%;
-  margin-right: 10px;
-}
-
-.filter-section p {
+.filter-section__count {
   font-size: 0.8rem;
   color: var(--secondary-text-color);
-  margin: 0 0 15px 0;
+  margin-bottom: 12px;
+  display: block;
 }
 
-.filter-section input[type="text"] {
+.filter-section__clear {
+  background: none;
+  border: none;
+  color: var(--accent-color);
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-decoration: underline;
+  margin-bottom: 12px;
+  display: block;
+  padding: 0;
+}
+
+.filter-section__clear:hover {
+  opacity: 0.8;
+}
+
+.filter-search {
   width: 100%;
   padding: 8px 12px;
   background-color: var(--input-bg);
@@ -225,26 +332,44 @@
   border-radius: 6px;
   color: var(--text-color);
   font-size: 0.9rem;
-  margin-bottom: 15px;
+  margin-bottom: 16px;
+  box-sizing: border-box;
 }
 
-.checkbox-list {
-  max-height: 200px;
+.filter-search:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.filter-list {
+  max-height: 280px;
   overflow-y: auto;
-  padding-right: 10px;
+  padding-right: 4px;
+  margin-bottom: 0;
 }
 
-.checkbox-list label {
-  display: block;
-  margin-bottom: 10px;
-  font-size: 0.9rem;
-  cursor: pointer;
+.filter-item {
   display: flex;
   align-items: center;
+  margin-bottom: 2px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  height: 28px;
+  padding: 0 4px;
+  border-radius: 4px;
+  transition: background-color 0.15s ease;
 }
 
-.checkbox-list input[type="checkbox"] {
-  margin-right: 10px;
+.filter-item:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.filter-item:last-child {
+  margin-bottom: 0;
+}
+
+.filter-item input[type="checkbox"] {
+  margin-right: 12px;
   appearance: none;
   width: 16px;
   height: 16px;
@@ -253,22 +378,58 @@
   background-color: var(--input-bg);
   cursor: pointer;
   position: relative;
-  top: -1px;
+  flex-shrink: 0;
 }
 
-.checkbox-list input[type="checkbox"]:checked {
+.filter-item input[type="checkbox"]:checked {
   background-color: var(--accent-color);
   border-color: var(--accent-color);
 }
 
-.checkbox-list input[type="checkbox"]:checked::after {
+.filter-item input[type="checkbox"]:checked::after {
   content: '✔';
-  font-size: 12px;
+  font-size: 11px;
   color: white;
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
+}
+
+.filter-label {
+  color: var(--text-color);
+  flex: 1;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.filter-more {
+  font-size: 0.8rem;
+  color: var(--secondary-text-color);
+  text-align: center;
+  padding: 4px 8px 0 8px;
+  font-style: italic;
+  margin-bottom: 0;
+}
+
+/* Scrollbar styling for filter list */
+.filter-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.filter-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 3px;
+}
+
+.filter-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+
+.filter-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 /* Games Info */

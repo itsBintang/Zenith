@@ -108,33 +108,35 @@
 .library-game-item {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 12px;
   width: 100%;
-  padding: 0.5rem;
-  border-radius: 4px;
+  padding: 8px;
+  border-radius: 6px;
   background: none;
   border: none;
   text-align: left;
   cursor: pointer;
-  color: #ddd;
-  transition: background-color 0.2s;
+  color: #c0c1c7; /* --hydra-text-muted */
+  transition: background-color 0.2s, color 0.2s;
   min-width: 0;
   box-sizing: border-box;
 }
 
 .library-game-item:hover {
-  background-color: #2a2a2a;
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #fff;
 }
 
 .game-item-icon {
   width: 32px;
-  height: 15px;
-  object-fit: cover;
-  border-radius: 2px;
+  height: 32px;
+  object-fit: contain; /* Prevent image distortion */
+  border-radius: 4px;
+  flex-shrink: 0; /* Prevent icon from shrinking */
 }
 
 .game-item-name {
-  font-size: 0.85rem;
+  font-size: 0.9rem; /* Slightly larger font */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

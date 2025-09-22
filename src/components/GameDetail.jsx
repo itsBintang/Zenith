@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { FiArrowLeft, FiCloud, FiDownload, FiPlay, FiSettings, FiCheck, FiX, FiTrash2, FiPackage, FiRefreshCw } from "react-icons/fi";
+import { FiArrowLeft, FiCloud, FiDownload, FiPlay, FiSettings, FiCheck, FiX, FiTrash2, FiPackage, FiRefreshCw, FiChevronDown } from "react-icons/fi";
 import { GameDetailSkeleton } from "./SkeletonLoader";
 import DlcManager from "./DlcManager";
 import "../styles/GameDetail.css";
@@ -33,59 +33,10 @@ function ToastNotification({ message, type, onClose }) {
   );
 }
 
-// HeroPanel component for actions and info
-function HeroPanel({ detail, onAddToLibrary, onRemoveFromLibrary, isDownloading, isInLibrary, bypassInstalled, onLaunchBypassGame, isLaunching }) {
-  const formatDate = (dateStr) => {
-    if (!dateStr) return "N/A";
-    const date = new Date(dateStr);
-    return date.toLocaleDateString();
-  };
-
-  return (
-    <div className="hero-panel">
-      <div className="hero-panel__content">
-        <p>Released on {formatDate(detail.release_date)}</p>
-        <p>Published by {detail.publisher || "Unknown"}</p>
-      </div>
-      <div className="hero-panel__actions">
-        {!isInLibrary ? (
-          <button 
-            className="hero-button hero-button--primary" 
-            onClick={onAddToLibrary}
-            disabled={isDownloading}
-          >
-            <FiDownload /> 
-            {isDownloading ? "Installing..." : "Add to library"}
-          </button>
-        ) : (
-          <>
-            {bypassInstalled && (
-              <button 
-                className="hero-button hero-button--play" 
-                onClick={onLaunchBypassGame}
-                disabled={isLaunching || isDownloading}
-              >
-                <FiPlay /> 
-                {isLaunching ? "Launching..." : "Play"}
-              </button>
-            )}
-            <button 
-              className="hero-button hero-button--danger" 
-              onClick={onRemoveFromLibrary}
-              disabled={isDownloading}
-            >
-              <FiTrash2 /> 
-              {isDownloading ? "Removing..." : "Remove from library"}
-            </button>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // Sidebar component for requirements and DRM
 function Sidebar({ detail, activeTab, setActiveTab, drmData, loadingDrm }) {
+  const [isExpanded, setIsExpanded] = useState(true);
+
   const formatRequirements = (reqHtml) => {
     if (!reqHtml) return { __html: "<p>No requirements specified</p>" };
     
@@ -117,30 +68,37 @@ function Sidebar({ detail, activeTab, setActiveTab, drmData, loadingDrm }) {
 
       {/* Requirements Section */}
       <div className="sidebar-section">
-        <h3 className="sidebar-section__title">System requirements</h3>
-        <div className="requirement__button-container">
-          <button
-            className={`requirement__button ${activeTab === 'minimum' ? 'active' : ''}`}
-            onClick={() => setActiveTab('minimum')}
-          >
-            Minimum
-          </button>
-          <button
-            className={`requirement__button ${activeTab === 'recommended' ? 'active' : ''}`}
-            onClick={() => setActiveTab('recommended')}
-          >
-            Recommended
-          </button>
-        </div>
-        <div className="requirement__content">
-          <h4 className="requirement__type-title">{activeTab === 'minimum' ? 'Minimum:' : 'Recommended:'}</h4>
-          <div 
-            className="requirement__details"
-            dangerouslySetInnerHTML={formatRequirements(
-              activeTab === 'minimum' ? detail.pc_requirements?.minimum : detail.pc_requirements?.recommended
-            )}
-          />
-        </div>
+        <h3 className="sidebar-section__title" onClick={() => setIsExpanded(!isExpanded)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>System requirements</span>
+          <FiChevronDown style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+        </h3>
+        {isExpanded && (
+          <>
+            <div className="requirement__button-container">
+              <button
+                className={`requirement__button ${activeTab === 'minimum' ? 'active' : ''}`}
+                onClick={() => setActiveTab('minimum')}
+              >
+                Minimum
+              </button>
+              <button
+                className={`requirement__button ${activeTab === 'recommended' ? 'active' : ''}`}
+                onClick={() => setActiveTab('recommended')}
+              >
+                Recommended
+              </button>
+            </div>
+            <div className="requirement__content">
+              <h4 className="requirement__type-title">{activeTab === 'minimum' ? 'Minimum:' : 'Recommended:'}</h4>
+              <div 
+                className="requirement__details"
+                dangerouslySetInnerHTML={formatRequirements(
+                  activeTab === 'minimum' ? detail.pc_requirements?.minimum : detail.pc_requirements?.recommended
+                )}
+              />
+            </div>
+          </>
+        )}
       </div>
     </aside>
   );
@@ -515,21 +473,57 @@ function GameDetail() {
           </div>
         </div>
 
-        {/* Hero Panel */}
-        <HeroPanel 
-          detail={detail} 
-          onAddToLibrary={handleAddToLibrary}
-          onRemoveFromLibrary={handleRemoveFromLibrary}
-          isDownloading={isDownloading}
-          isInLibrary={isInLibrary}
-          bypassInstalled={bypassInstalled}
-          onLaunchBypassGame={handleLaunchBypassGame}
-          isLaunching={isLaunching}
-        />
+        {/* Action Bar */}
+        <div className="game-details__action-bar">
+            <div className="action-bar__left">
+                <p className="play-status">
+                    {isInLibrary ? `You haven't played ${detail.name} yet` : `Not in library`}
+                </p>
+            </div>
+            <div className="action-bar__right">
+                {!isInLibrary ? (
+                    <button 
+                        className="hero-button hero-button--primary" 
+                        onClick={handleAddToLibrary}
+                        disabled={isDownloading}
+                    >
+                        <FiDownload /> 
+                        {isDownloading ? "Installing..." : "Add to library"}
+                    </button>
+                ) : (
+                    <>
+                        {bypassInstalled && (
+                            <button 
+                                className="hero-button hero-button--play" 
+                                onClick={handleLaunchBypassGame}
+                                disabled={isLaunching || isDownloading}
+                            >
+                                <FiPlay /> 
+                                {isLaunching ? "Launching..." : "Play"}
+                            </button>
+                        )}
+                        <button 
+                            className="hero-button hero-button--danger" 
+                            onClick={handleRemoveFromLibrary}
+                            disabled={isDownloading}
+                        >
+                            <FiTrash2 /> 
+                            {isDownloading ? "Removing..." : "Remove"}
+                        </button>
+                    </>
+                )}
+            </div>
+        </div>
 
         {/* Main Content */}
         <div className="game-details__description-container">
           <div className="game-details__description-content">
+            
+            {/* Meta Info */}
+            <div className="game-details__meta-info">
+                <p>Released on {new Date(detail.release_date).toLocaleDateString()}</p>
+                <p>Published by {detail.publisher || "Unknown"}</p>
+            </div>
 
             {/* Gallery */}
             <GallerySlider screenshots={detail.screenshots} />

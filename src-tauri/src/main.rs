@@ -6,6 +6,7 @@ mod database;
 mod models;
 mod bypass;
 mod steam_utils;
+mod catalogue;
 
 use crate::steam_utils::{find_steam_config_path, find_steam_executable_path, update_lua_files};
 use futures::stream::{self, StreamExt};
@@ -2254,8 +2255,12 @@ fn get_local_changelog() -> Result<ChangelogEntry, String> {
 
 fn main() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .setup(|app| {
+            // Initialize the database
+            catalogue::init_database(app.handle())
+                .expect("Failed to initialize the catalogue database");
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             greet,
             download_game,
@@ -2318,6 +2323,11 @@ fn main() {
             commands::get_steam_path,
             commands::set_steam_path,
             commands::detect_steam_path,
+            catalogue::get_games,
+            catalogue::search_games,
+            catalogue::get_all_genres,
+            catalogue::filter_games_by_genre,
+            catalogue::hybrid_search,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

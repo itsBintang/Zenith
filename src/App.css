@@ -717,11 +717,11 @@ button:focus-visible {
 
 .ui-btn--steam {
   width: 100%;
-  background: linear-gradient(135deg, #1e40af, #3b82f6);
-  color: white;
-  border: none;
+  background: var(--hydra-bg);
+  color: var(--hydra-text-body);
+  border: 1px solid var(--hydra-border);
   padding: 0.75rem 1rem;
-  border-radius: 6px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -734,13 +734,13 @@ button:focus-visible {
 }
 
 .ui-btn--steam:hover:not(:disabled) {
-  background: linear-gradient(135deg, #1d4ed8, #2563eb);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--hydra-text-muted);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .ui-btn--steam:active {
-  transform: translateY(0);
+  transform: translateY(1px);
 }
 
 .ui-btn--steam:disabled {
