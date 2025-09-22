@@ -132,11 +132,12 @@ const Catalogue = () => {
       } else {
         // If no results in CSV, fallback to API
         try {
-          const res = await invoke("search_games_api", { query: globalSearchQuery });
-          const cleanedResults = res.filter(game => 
-            game.type === "game" || game.type === "application"
-          );
-          setApiResults(cleanedResults);
+          const res = await invoke("search_games_hybrid", { 
+            query: globalSearchQuery, 
+            useCatalogue: false, 
+            limit: 20 
+          });
+          setApiResults(res);
           setShowApiResults(true);
         } catch (error) {
           console.error("API search failed:", error);
@@ -269,7 +270,7 @@ const Catalogue = () => {
           </>
               ) : showApiResults ? (
                 <>
-                  {apiResults.map((game, index) => (
+                  {apiResults && apiResults.length > 0 ? apiResults.map((game, index) => (
                     <div 
                       key={`api-${game.app_id}-${index}`} 
                       className="game-card"
@@ -278,10 +279,14 @@ const Catalogue = () => {
                       <img src={game.header_image} alt={game.name} className="game-image" loading="lazy" width="231" height="87" />
                       <div className="game-info">
                         <h3>{game.name}</h3>
-                        <p></p>
+                        <p>Source: {game.source}</p>
                       </div>
                     </div>
-                  ))}
+                  )) : (
+                    <div className="no-results">
+                      <p>No results found for "{globalSearchQuery}"</p>
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
@@ -354,3 +359,4 @@ const Catalogue = () => {
 };
 
 export default Catalogue;
+

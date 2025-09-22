@@ -176,7 +176,7 @@ fn is_valid_game_item(name: &str, item_type: &str) -> bool {
     let excluded_patterns = [
         "dlc", "downloadable content", "expansion pack", "season pass",
         "soundtrack", "ost", "original soundtrack", "music",
-        "artbook", "art book", "wallpaper", "avatar", "emoticon",
+        "artbook", "art book", "sketchbook", "wallpaper", "avatar", "emoticon",
         "trading card", "badge", "profile background",
         "demo", "beta", "test", "benchmark",
         "tool", "sdk", "editor", "mod",
@@ -184,7 +184,10 @@ fn is_valid_game_item(name: &str, item_type: &str) -> bool {
         "supporter pack", "cosmetic pack", "skin pack",
         "character pack", "weapon pack", "map pack",
         "content pack", "bonus content", "digital deluxe",
-        "collector's edition upgrade", "upgrade pack"
+        "collector's edition upgrade", "upgrade pack",
+        "companion app", "mobile companion", "viewer",
+        "prologue", "prelude", "epilogue", "chapter",
+        "free content", "free dlc", "update", "starter pack"
     ];
     
     // Check if name contains any excluded patterns
@@ -324,23 +327,22 @@ async fn download_game(
     let mut repos = Vec::new();
     // Prioritas pertama
     repos.push(("SteamAutoCracks/ManifestHub".to_string(), RepoType::Branch));
-    repos.push(("Fairyvmos/bruh-hub".to_string(), RepoType::Branch));
-    repos.push(("itsBintang/ManifestHub".to_string(), RepoType::Branch));
-    repos.push(("https://furcate.eu/FILES/".to_string(), RepoType::DirectZip));
     repos.push((
         "https://raw.githubusercontent.com/sushi-dev55/sushitools-games-repo/refs/heads/main/"
             .to_string(),
         RepoType::DirectZip,
     ));
-    repos.push((
-        "http://masss.pythonanywhere.com/storage?auth=IEOIJE54esfsipoE56GE4&appid=".to_string(),
-        RepoType::DirectUrl,
-    ));
+    repos.push(("Fairyvmos/bruh-hub".to_string(), RepoType::Branch));
+    repos.push(("itsBintang/ManifestHub".to_string(), RepoType::Branch));
     repos.push((
         "https://mellyiscoolaf.pythonanywhere.com/".to_string(),
         RepoType::DirectUrl,
     ));
-
+    repos.push(("https://furcate.eu/FILES/".to_string(), RepoType::DirectZip));
+    repos.push((
+        "http://masss.pythonanywhere.com/storage?auth=IEOIJE54esfsipoE56GE4&appid=".to_string(),
+        RepoType::DirectUrl,
+    ));
     // Use global HTTP client
 
     // Try downloading from repositories
