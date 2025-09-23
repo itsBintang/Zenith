@@ -309,7 +309,7 @@ const Catalogue = () => {
                   />
                   
                   <div className="filter-list">
-                    {filteredGenres.slice(0, 10).map((genre) => (
+                    {filteredGenres.map((genre) => (
                       <label key={genre} className="filter-item">
                         <input 
                           type="checkbox" 
@@ -319,11 +319,6 @@ const Catalogue = () => {
                         <span className="filter-label">{genre}</span>
                       </label>
                     ))}
-                    {filteredGenres.length > 10 && (
-                      <div className="filter-more">
-                        +{filteredGenres.length - 10} more genres...
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>

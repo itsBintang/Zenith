@@ -43,7 +43,7 @@ fn get_db_connection() -> std::sync::MutexGuard<'static, Option<Connection>> {
     DB_CONNECTION.lock().unwrap()
 }
 
-pub fn init_database(handle: &AppHandle) -> Result<()> {
+pub async fn init_database(handle: &AppHandle) -> Result<()> {
     let app_data_dir = handle.path().app_data_dir().expect("Failed to get app data dir");
     if !app_data_dir.exists() {
         fs::create_dir_all(&app_data_dir).expect("Failed to create app data dir");
@@ -71,7 +71,8 @@ pub fn init_database(handle: &AppHandle) -> Result<()> {
 
     if count == 0 {
         println!("Database is empty. Downloading and populating from CSV...");
-        populate_from_github_csv(&mut conn).expect("Failed to populate database from GitHub CSV");
+        populate_from_github_csv(&mut conn).await.expect("Failed to populate database from GitHub CSV");
+        println!("Database population completed successfully!");
     } else {
         println!("Database already populated with {} games.", count);
     }
@@ -81,11 +82,11 @@ pub fn init_database(handle: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-fn populate_from_github_csv(conn: &mut Connection) -> Result<(), Box<dyn std::error::Error>> {
+async fn populate_from_github_csv(conn: &mut Connection) -> Result<(), Box<dyn std::error::Error>> {
     println!("Downloading CSV from GitHub...");
     
-    let response = reqwest::blocking::get("https://raw.githubusercontent.com/itsBintang/SteamDB/refs/heads/main/SteamDB.csv")?;
-    let csv_content = response.text()?;
+    let response = reqwest::get("https://raw.githubusercontent.com/itsBintang/SteamDB/refs/heads/main/SteamDB.csv").await?;
+    let csv_content = response.text().await?;
     
     println!("CSV downloaded, parsing data...");
     let mut rdr = csv::Reader::from_reader(csv_content.as_bytes());

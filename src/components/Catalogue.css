@@ -404,14 +404,6 @@
   white-space: nowrap;
 }
 
-.filter-more {
-  font-size: 0.8rem;
-  color: var(--secondary-text-color);
-  text-align: center;
-  padding: 4px 8px 0 8px;
-  font-style: italic;
-  margin-bottom: 0;
-}
 
 /* Scrollbar styling for filter list */
 .filter-list::-webkit-scrollbar {

@@ -549,7 +549,7 @@ struct InitProgress {
 }
 
 #[command]
-async fn initialize_app() -> Result<Vec<InitProgress>, String> {
+async fn initialize_app(app: tauri::AppHandle) -> Result<Vec<InitProgress>, String> {
     let mut progress_steps = Vec::new();
 
     // Step 1: Check Steam installation
@@ -563,7 +563,7 @@ async fn initialize_app() -> Result<Vec<InitProgress>, String> {
         Ok(_) => {
             progress_steps.push(InitProgress {
                 step: "Steam found successfully".to_string(),
-                progress: 40.0,
+                progress: 20.0,
                 completed: true,
             });
         }
@@ -572,10 +572,36 @@ async fn initialize_app() -> Result<Vec<InitProgress>, String> {
         }
     }
 
-    // Step 2: Initialize cache system and run migration
+    // Step 2: Initialize catalogue database
+    progress_steps.push(InitProgress {
+        step: "Initializing game catalogue database...".to_string(),
+        progress: 25.0,
+        completed: false,
+    });
+
+    progress_steps.push(InitProgress {
+        step: "Downloading game catalogue data (this may take a moment)...".to_string(),
+        progress: 30.0,
+        completed: false,
+    });
+
+    match catalogue::init_database(&app).await {
+        Ok(_) => {
+            progress_steps.push(InitProgress {
+                step: "Game catalogue database ready".to_string(),
+                progress: 45.0,
+                completed: true,
+            });
+        }
+        Err(e) => {
+            return Err(format!("Failed to initialize catalogue database: {}", e));
+        }
+    }
+
+    // Step 3: Initialize cache system and run migration
     progress_steps.push(InitProgress {
         step: "Initializing SQLite cache system...".to_string(),
-        progress: 50.0,
+        progress: 55.0,
         completed: false,
     });
 
@@ -605,14 +631,14 @@ async fn initialize_app() -> Result<Vec<InitProgress>, String> {
 
     progress_steps.push(InitProgress {
         step: "SQLite cache system ready".to_string(),
-        progress: 75.0,
+        progress: 70.0,
         completed: true,
     });
 
-    // Step 3: Pre-load library with full game names (warm-up cache)
+    // Step 4: Pre-load library with full game names (warm-up cache)
     progress_steps.push(InitProgress {
         step: "Loading game library...".to_string(),
-        progress: 70.0,
+        progress: 80.0,
         completed: false,
     });
 
@@ -640,7 +666,7 @@ async fn initialize_app() -> Result<Vec<InitProgress>, String> {
                 "Pre-loading {} games (this ensures instant library access)...",
                 app_ids.len()
             ),
-            progress: 70.0,
+            progress: 85.0,
             completed: false,
         });
 
@@ -2255,10 +2281,9 @@ fn get_local_changelog() -> Result<ChangelogEntry, String> {
 
 fn main() {
     tauri::Builder::default()
-        .setup(|app| {
-            // Initialize the database
-            catalogue::init_database(app.handle())
-                .expect("Failed to initialize the catalogue database");
+        .setup(|_app| {
+            // Database initialization moved to initialize_app function
+            // to provide proper loading screen feedback
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
