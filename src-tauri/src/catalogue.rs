@@ -332,7 +332,7 @@ async fn search_external_api(query: &str, limit: usize) -> Result<Vec<ApiGame>, 
 
     if let Some(items) = json["items"].as_array() {
         for item in items.iter().take(limit) {
-            if let (Some(id), Some(name), Some(img)) = (
+            if let (Some(id), Some(name), Some(_img)) = (
                 item["id"].as_u64(),
                 item["name"].as_str(),
                 item["tiny_image"].as_str(),

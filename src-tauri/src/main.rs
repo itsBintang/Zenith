@@ -339,7 +339,6 @@ async fn download_game(
         "https://mellyiscoolaf.pythonanywhere.com/".to_string(),
         RepoType::DirectUrl,
     ));
-    repos.push(("https://furcate.eu/FILES/".to_string(), RepoType::DirectZip));
     repos.push((
         "http://masss.pythonanywhere.com/storage?auth=IEOIJE54esfsipoE56GE4&appid=".to_string(),
         RepoType::DirectUrl,
@@ -2281,6 +2280,8 @@ fn get_local_changelog() -> Result<ChangelogEntry, String> {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|_app| {
             // Database initialization moved to initialize_app function
             // to provide proper loading screen feedback
@@ -2317,6 +2318,7 @@ fn main() {
             check_for_updates,
             install_update,
             get_changelog,
+            commands::update_game_files_enhanced,
             // Debug commands
             database::commands::debug_cache_entry,
             database::commands::force_clear_cache,

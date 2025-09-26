@@ -1,4 +1,4 @@
-use crate::models::RepoType;
+use crate::models::{RepoType, UpdateStrategy, UpdateSource, ManifestInfo, UpdateResult};
 use anyhow::Result;
 use regex::Regex;
 // Removed unused imports
@@ -580,5 +580,324 @@ pub async fn detect_steam_path() -> Result<Option<String>, String> {
     }
     
     Ok(None)
+}
+
+// ==================== ENHANCED UPDATE SYSTEM ====================
+
+/// Get all available update sources with priority order
+fn get_update_sources() -> Vec<UpdateSource> {
+    vec![
+        UpdateSource {
+            name: "SteamAutoCracks/ManifestHub".to_string(),
+            url: "https://api.github.com/repos/SteamAutoCracks/ManifestHub/zipball/".to_string(),
+            repo_type: RepoType::Branch,
+            priority: 1,
+            is_reliable: true,
+        },
+        UpdateSource {
+            name: "Fairyvmos/bruh-hub".to_string(),
+            url: "https://api.github.com/repos/Fairyvmos/bruh-hub/zipball/".to_string(),
+            repo_type: RepoType::Branch,
+            priority: 2,
+            is_reliable: true,
+        },
+        UpdateSource {
+            name: "itsBintang/ManifestHub".to_string(),
+            url: "https://api.github.com/repos/itsBintang/ManifestHub/zipball/".to_string(),
+            repo_type: RepoType::Branch,
+            priority: 3,
+            is_reliable: true,
+        },
+        UpdateSource {
+            name: "ManifestHub/ManifestHub".to_string(),
+            url: "https://api.github.com/repos/ManifestHub/ManifestHub/zipball/".to_string(),
+            repo_type: RepoType::Decrypted,
+            priority: 4,
+            is_reliable: true,
+        },
+        UpdateSource {
+            name: "sushi-dev55/sushitools-games-repo".to_string(),
+            url: "https://raw.githubusercontent.com/sushi-dev55/sushitools-games-repo/refs/heads/main/".to_string(),
+            repo_type: RepoType::DirectZip,
+            priority: 5,
+            is_reliable: false,
+        },
+        UpdateSource {
+            name: "mellyiscoolaf.pythonanywhere.com".to_string(),
+            url: "https://mellyiscoolaf.pythonanywhere.com/".to_string(),
+            repo_type: RepoType::DirectUrl,
+            priority: 6,
+            is_reliable: false,
+        },
+    ]
+}
+
+/// Download manifest from a single source
+async fn download_from_source(
+    client: &reqwest::Client,
+    source: &UpdateSource,
+    app_id: &str,
+) -> Result<HashMap<String, ManifestInfo>, String> {
+    let download_url = match source.repo_type {
+        RepoType::Branch | RepoType::Decrypted => {
+            format!("{}{}", source.url, app_id)
+        }
+        RepoType::DirectZip => {
+            format!("{}{}.zip", source.url, app_id)
+        }
+        RepoType::DirectUrl => {
+            format!("{}{}", source.url, app_id)
+        }
+        _ => return Err("Unsupported repo type".to_string()),
+    };
+
+    println!("📡 Downloading from: {} ({})", source.name, download_url);
+
+    let response = client
+        .get(&download_url)
+        .timeout(Duration::from_secs(60))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("HTTP {}", response.status()));
+    }
+
+    let zip_bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read response: {}", e))?;
+
+    extract_manifests_from_zip(&zip_bytes, &source.name)
+}
+
+/// Extract manifest information from ZIP
+fn extract_manifests_from_zip(
+    zip_bytes: &bytes::Bytes,
+    source_name: &str,
+) -> Result<HashMap<String, ManifestInfo>, String> {
+    let mut manifest_map = HashMap::new();
+    let mut archive = ZipArchive::new(std::io::Cursor::new(zip_bytes))
+        .map_err(|e| format!("Failed to read ZIP: {}", e))?;
+
+    for i in 0..archive.len() {
+        let file = archive
+            .by_index(i)
+            .map_err(|e| format!("Failed to read ZIP entry: {}", e))?;
+        
+        let file_path = file
+            .enclosed_name()
+            .ok_or("Invalid file path in ZIP")?;
+
+        if let Some(ext) = file_path.extension() {
+            if ext == "manifest" {
+                if let Some(file_name_os) = file_path.file_name() {
+                    if let Some(file_name) = file_name_os.to_str() {
+                        let re = Regex::new(r"(\d+)_(\d+)\.manifest").unwrap();
+                        if let Some(caps) = re.captures(file_name) {
+                            let depot_id = caps.get(1).unwrap().as_str().to_string();
+                            let manifest_id = caps.get(2).unwrap().as_str().to_string();
+                            
+                            let manifest_info = ManifestInfo {
+                                depot_id: depot_id.clone(),
+                                manifest_id: manifest_id.clone(),
+                                source: source_name.to_string(),
+                                timestamp: std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap()
+                                    .as_secs(),
+                            };
+                            
+                            manifest_map.insert(depot_id, manifest_info);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if manifest_map.is_empty() {
+        return Err("No manifest files found".to_string());
+    }
+
+    Ok(manifest_map)
+}
+
+/// Compare manifests and find the newest for each depot
+fn find_newest_manifests(
+    all_manifests: Vec<HashMap<String, ManifestInfo>>,
+) -> HashMap<String, ManifestInfo> {
+    let mut newest_manifests: HashMap<String, ManifestInfo> = HashMap::new();
+
+    // Flatten all manifests into a single collection
+    for manifest_map in all_manifests {
+        for (depot_id, manifest_info) in manifest_map {
+            match newest_manifests.get(&depot_id) {
+                Some(existing) => {
+                    // Compare manifest IDs (newer usually means bigger number, but not always)
+                    // For now, we'll use timestamp and fallback to string comparison
+                    if manifest_info.timestamp > existing.timestamp ||
+                       (manifest_info.timestamp == existing.timestamp && 
+                        manifest_info.manifest_id > existing.manifest_id) {
+                        newest_manifests.insert(depot_id, manifest_info);
+                    }
+                }
+                None => {
+                    newest_manifests.insert(depot_id, manifest_info);
+                }
+            }
+        }
+    }
+
+    newest_manifests
+}
+
+/// Enhanced update function - now only uses smart update
+#[command]
+pub async fn update_game_files_enhanced(
+    app_id: String,
+    game_name: String,
+    strategy: Option<String>,
+) -> Result<UpdateResult, String> {
+    println!("🚀 Starting smart update for {}", game_name);
+
+    let steam_config_path = find_steam_config_path().map_err(|e| e.to_string())?;
+    let lua_file_path = find_lua_file_for_appid(&steam_config_path, &app_id).map_err(|e| e.to_string())?;
+
+    let client = reqwest::Client::builder()
+        .user_agent("zenith-updater/2.0")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    // Always use smart update
+    smart_update(&client, &app_id, &game_name, &lua_file_path).await
+}
+
+/// Smart update - check all sources and use newest manifests automatically
+async fn smart_update(
+    client: &reqwest::Client,
+    app_id: &str,
+    game_name: &str,
+    lua_file_path: &PathBuf,
+) -> Result<UpdateResult, String> {
+    println!("🧠 Smart update: Automatically getting latest version from all sources...");
+    
+    let sources = get_update_sources();
+    let mut all_manifests = Vec::new();
+
+    println!("🔍 Checking all sources for newest manifests...");
+
+    for source in &sources {
+        match download_from_source(client, source, app_id).await {
+            Ok(manifests) => {
+                println!("✅ Got {} manifests from {}", manifests.len(), source.name);
+                all_manifests.push(manifests);
+            }
+            Err(e) => {
+                println!("❌ Failed {}: {}", source.name, e);
+            }
+        }
+    }
+
+    if all_manifests.is_empty() {
+        return Err("No sources provided manifests".to_string());
+    }
+
+    let newest_manifests = find_newest_manifests(all_manifests);
+    let manifest_map: HashMap<String, String> = newest_manifests
+        .iter()
+        .map(|(k, v)| (k.clone(), v.manifest_id.clone()))
+        .collect();
+
+    let (updated_count, appended_count) = apply_manifests_to_lua(lua_file_path, &manifest_map)?;
+
+    // Build source info
+    let sources_used: Vec<String> = newest_manifests
+        .values()
+        .map(|m| m.source.clone())
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    Ok(UpdateResult {
+        success: true,
+        message: format!("✅ {} updated successfully!", game_name),
+        updated_count,
+        appended_count,
+        source_used: sources_used.join(", "),
+        strategy_used: UpdateStrategy::Smart,
+        has_newer_available: false,
+        newer_sources: vec![],
+    })
+}
+
+/// Extract current manifests from lua file
+fn extract_manifests_from_lua(lua_content: &str) -> HashMap<String, String> {
+    let mut manifests = HashMap::new();
+    let re = Regex::new(r#"setManifestid\s*\(\s*(\d+)\s*,\s*"([^"]+)"\s*,\s*0\s*\)"#).unwrap();
+    
+    for caps in re.captures_iter(lua_content) {
+        let depot_id = caps.get(1).unwrap().as_str().to_string();
+        let manifest_id = caps.get(2).unwrap().as_str().to_string();
+        manifests.insert(depot_id, manifest_id);
+    }
+    
+    manifests
+}
+
+/// Apply manifests to lua file
+fn apply_manifests_to_lua(
+    lua_file_path: &PathBuf,
+    manifest_map: &HashMap<String, String>,
+) -> Result<(u32, u32), String> {
+    let original_lua_content = fs::read_to_string(lua_file_path).map_err(|e| e.to_string())?;
+    let mut updated_count = 0;
+    let mut appended_count = 0;
+
+    let re_replace = Regex::new(r#"setManifestid\s*\(\s*(\d+)\s*,\s*"(\d+)"\s*,\s*0\s*\)"#).unwrap();
+    let mut processed_depots: HashMap<String, bool> = HashMap::new();
+
+    let mut updated_lua_content = re_replace
+        .replace_all(&original_lua_content, |caps: &regex::Captures| {
+            let depot_id = caps.get(1).unwrap().as_str();
+            let old_manifest_id = caps.get(2).unwrap().as_str();
+            processed_depots.insert(depot_id.to_string(), true);
+
+            if let Some(new_manifest_id) = manifest_map.get(depot_id) {
+                if new_manifest_id != old_manifest_id {
+                    updated_count += 1;
+                    format!(r#"setManifestid({}, "{}", 0)"#, depot_id, new_manifest_id)
+                } else {
+                    caps.get(0).unwrap().as_str().to_string()
+                }
+            } else {
+                caps.get(0).unwrap().as_str().to_string()
+            }
+        })
+        .to_string();
+
+    let mut lines_to_append = Vec::new();
+    for (depot_id, manifest_id) in manifest_map {
+        if !processed_depots.contains_key(depot_id) {
+            lines_to_append.push(format!(
+                r#"setManifestid({}, "{}", 0)"#,
+                depot_id, manifest_id
+            ));
+            appended_count += 1;
+        }
+    }
+
+    if !lines_to_append.is_empty() {
+        updated_lua_content.push_str("\n-- Appended by Zenith Enhanced Updater --\n");
+        updated_lua_content.push_str(&lines_to_append.join("\n"));
+        updated_lua_content.push('\n');
+    }
+
+    if updated_count > 0 || appended_count > 0 {
+        fs::write(lua_file_path, updated_lua_content).map_err(|e| e.to_string())?;
+    }
+
+    Ok((updated_count, appended_count))
 }
 

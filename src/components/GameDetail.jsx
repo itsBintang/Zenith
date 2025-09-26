@@ -329,21 +329,25 @@ function GameDetail() {
     if (!detail || isUpdating) return;
   
     setIsUpdating(true);
+    
     setNotification({
-      message: `Searching for ${detail.name} updates...`,
-      type: 'info' // Or a different type for ongoing processes
+      message: `Updating ${detail.name}...`,
+      type: 'info'
     });
   
     try {
-      const result = await invoke("update_game_files", { 
+      const result = await invoke("update_game_files_enhanced", { 
         appId: detail.app_id,
-        gameName: detail.name 
+        gameName: detail.name,
+        strategy: 'smart'
       });
       
       setNotification({
-        message: result, // Success or error message from backend
+        message: result.message,
         type: 'success'
       });
+
+      
     } catch (error) {
       console.error("Update error:", error);
       setNotification({
@@ -461,12 +465,12 @@ function GameDetail() {
               
               {isInLibrary && (
                 <button 
-                  className="game-details__dlc-button"
+                  className="game-details__update-button"
                   onClick={handleManageDlcs}
                   disabled={isDownloading}
                 >
                   <FiPackage />
-                  DLC Unlocker
+                  DLC UNLOCKER
                 </button>
               )}
             </div>
@@ -548,7 +552,6 @@ function GameDetail() {
           showNotification={showNotificationFromDlc}
         />
       )}
-
 
 
     </div>

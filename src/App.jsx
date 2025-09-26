@@ -12,6 +12,7 @@ function App() {
   const [loadingProgress, setLoadingProgress] = React.useState(0);
   const [loadingStep, setLoadingStep] = React.useState("Initializing Zenith...");
   const [initError, setInitError] = React.useState(null);
+  const [toastNotification, setToastNotification] = React.useState(null);
   
   // We'll need a way to manage library and profile state later, 
   // perhaps with Context API as a replacement for the old prop drilling.
@@ -63,6 +64,29 @@ function App() {
     initializeApp();
     
     return () => { isMounted = false; };
+  }, []);
+
+  React.useEffect(() => {
+    if (!isLoading && initError && initError.includes('Steam installation not found')) {
+      setToastNotification({
+        type: 'error',
+        message: 'Steam has not been detected. Please install Steam first, then restart Zenith.'
+      });
+    }
+  }, [isLoading, initError]);
+
+  React.useEffect(() => {
+    if (!toastNotification) return;
+
+    const timer = setTimeout(() => {
+      setToastNotification(null);
+    }, 6000);
+
+    return () => clearTimeout(timer);
+  }, [toastNotification]);
+
+  const closeToastNotification = React.useCallback(() => {
+    setToastNotification(null);
   }, []);
 
   // Event listener to handle navigation from backend or other non-React parts
@@ -141,6 +165,22 @@ function App() {
           </main>
         </div>
       </div>
+
+      {toastNotification && (
+        <div className="toast-notification-overlay">
+          <div className={`toast-notification ${toastNotification.type}`}>
+            <div className="toast-content">
+              <div className="toast-icon">
+                {toastNotification.type === 'success' ? '✓' : '✗'}
+              </div>
+              <div className="toast-message">{toastNotification.message}</div>
+              <button className="toast-close" onClick={closeToastNotification}>
+                ×
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

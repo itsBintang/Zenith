@@ -39,7 +39,11 @@ function Settings() {
 
   const handleBrowse = async () => {
     try {
-      const selected = await open({ directory: true, multiple: false });
+      const selected = await open({ 
+        directory: true, 
+        multiple: false,
+        title: "Select Download Folder"
+      });
       if (selected && typeof selected === "string") {
         setDownloadFolder(selected);
         localStorage.setItem("zenith.downloadFolder", selected);
@@ -57,7 +61,11 @@ function Settings() {
 
   const handleBrowseSteam = async () => {
     try {
-      const selected = await open({ directory: true, multiple: false });
+      const selected = await open({ 
+        directory: true, 
+        multiple: false,
+        title: "Select Steam Installation Folder"
+      });
       if (selected && typeof selected === "string") {
         try {
           // Validate and save to backend
