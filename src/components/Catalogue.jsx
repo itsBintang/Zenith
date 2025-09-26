@@ -36,7 +36,6 @@ const Catalogue = () => {
       setTotalGames(result.total_games);
       setHasMore(result.has_more);
       
-      console.log(`✅ Loaded ${result.games.length} games (page ${result.current_page})`);
     } catch (error) {
       console.error('Failed to fetch games:', error);
       setError(`Failed to load games: ${error}`);
@@ -111,6 +110,32 @@ const Catalogue = () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [handleSearchSubmit]);
+
+  // Listen for global search trigger from Header
+  useEffect(() => {
+    const handleTriggerSearch = (event) => {
+      const { query } = event.detail;
+      
+      if (query && query.trim() !== '') {
+        // Check if it's AppID (shouldn't happen here, but just in case)
+        const extractedAppId = extractAppIdFromUrl(query);
+        if (extractedAppId) {
+          navigate(`/game/${extractedAppId}`);
+          return;
+        }
+        
+        // Perform name search
+        setCurrentSearchQuery(query.trim());
+        setCurrentPage(1);
+      }
+    };
+
+    window.addEventListener('triggerSearch', handleTriggerSearch);
+    
+    return () => {
+      window.removeEventListener('triggerSearch', handleTriggerSearch);
+    };
+  }, [navigate]);
 
   const handleGameCardClick = (appId) => {
     navigate(`/game/${appId}`);

@@ -15,6 +15,35 @@ function Header({ globalSearchQuery, setGlobalSearchQuery }) {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Function to extract App ID from Steam URL or detect pure AppID
+  const extractAppIdFromUrl = (input) => {
+    if (!input) return null;
+    
+    // Check if input is already a pure App ID (numeric)
+    if (/^\d+$/.test(input.trim())) {
+      return input.trim();
+    }
+    
+    // Steam URL patterns:
+    // https://store.steampowered.com/app/2622380/ELDEN_RING_NIGHTREIGN/
+    // https://steamdb.info/app/578080/charts/
+    // steam://store/851850
+    const steamUrlPatterns = [
+      /store\.steampowered\.com\/app\/(\d+)/,
+      /steamdb\.info\/app\/(\d+)/,
+      /steam:\/\/store\/(\d+)/
+    ];
+    
+    for (const pattern of steamUrlPatterns) {
+      const match = input.match(pattern);
+      if (match) {
+        return match[1];
+      }
+    }
+    
+    return null;
+  };
+
   // A simple title logic for now. Can be expanded with context/state for dynamic titles like game names.
   const title = React.useMemo(() => {
     if (location.pathname.startsWith('/game/')) {
@@ -33,8 +62,35 @@ function Header({ globalSearchQuery, setGlobalSearchQuery }) {
   
   const handleSearchChange = (e) => {
     setGlobalSearchQuery(e.target.value);
-    if (location.pathname !== '/catalogue') {
-      navigate('/catalogue');
+    // Remove auto-navigation on typing, only navigate on Enter press
+  };
+
+  const handleSearchKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      const query = e.target.value.trim();
+      const extractedAppId = extractAppIdFromUrl(query);
+      
+      if (extractedAppId) {
+        // Navigate directly to game detail page if it's a Steam URL or App ID
+        navigate(`/game/${extractedAppId}`);
+        return;
+      }
+      
+      // For name search, ensure we're on catalogue and trigger search
+      if (location.pathname !== '/catalogue') {
+        navigate('/catalogue');
+        // Add delay to ensure catalogue component is mounted before triggering search
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('triggerSearch', { 
+            detail: { query } 
+          }));
+        }, 100); // Small delay to ensure component is ready
+      } else {
+        // Already on catalogue, trigger search immediately
+        window.dispatchEvent(new CustomEvent('triggerSearch', { 
+          detail: { query } 
+        }));
+      }
     }
   };
 
@@ -56,9 +112,10 @@ function Header({ globalSearchQuery, setGlobalSearchQuery }) {
           <FiSearch />
           <input 
             type="text" 
-            placeholder="Search games..." 
+            placeholder="Search games, App ID, or Steam URL..." 
             value={globalSearchQuery || ''}
             onChange={handleSearchChange}
+            onKeyPress={handleSearchKeyPress}
           />
         </div>
       </section>

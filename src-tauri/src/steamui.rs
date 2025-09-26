@@ -70,7 +70,6 @@ pub async fn fetch_steamui_games(
         sort
     );
 
-    println!("🌐 Fetching from SteamUI API: {}", url);
 
     let client = reqwest::Client::builder()
         .user_agent("Zenith-Launcher/1.0")
@@ -120,7 +119,6 @@ pub async fn fetch_steamui_games(
         page
     };
 
-    println!("✅ Fetched {} games (page {})", catalogue_games.len(), page);
 
     let games_count = catalogue_games.len() as u32;
     
