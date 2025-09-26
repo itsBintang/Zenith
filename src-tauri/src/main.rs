@@ -6,7 +6,7 @@ mod database;
 mod models;
 mod bypass;
 mod steam_utils;
-mod catalogue;
+mod steamui;
 
 use crate::steam_utils::{find_steam_config_path, find_steam_executable_path, update_lua_files};
 use futures::stream::{self, StreamExt};
@@ -584,18 +584,12 @@ async fn initialize_app(app: tauri::AppHandle) -> Result<Vec<InitProgress>, Stri
         completed: false,
     });
 
-    match catalogue::init_database(&app).await {
-        Ok(_) => {
-            progress_steps.push(InitProgress {
-                step: "Game catalogue database ready".to_string(),
-                progress: 45.0,
-                completed: true,
-            });
-        }
-        Err(e) => {
-            return Err(format!("Failed to initialize catalogue database: {}", e));
-        }
-    }
+    // Catalogue system removed - will use SteamSpy API instead
+    progress_steps.push(InitProgress {
+        step: "Game catalogue ready (SteamSpy API)".to_string(),
+        progress: 45.0,
+        completed: true,
+    });
 
     // Step 3: Initialize cache system and run migration
     progress_steps.push(InitProgress {
@@ -2350,11 +2344,9 @@ fn main() {
             commands::get_steam_path,
             commands::set_steam_path,
             commands::detect_steam_path,
-            catalogue::get_games,
-            catalogue::search_games,
-            catalogue::get_all_genres,
-            catalogue::filter_games_by_genre,
-            catalogue::hybrid_search,
+            // SteamUI API commands
+            steamui::fetch_steamui_games,
+            steamui::search_steamui_games,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

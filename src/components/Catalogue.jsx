@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import './Catalogue.css';
@@ -7,76 +7,51 @@ const Catalogue = () => {
   const navigate = useNavigate();
   const { globalSearchQuery } = useOutletContext();
   const [games, setGames] = useState([]);
-  const [showApiResults, setShowApiResults] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  
-  const [genres, setGenres] = useState([]);
-  const [selectedGenres, setSelectedGenres] = useState([]);
-  const [genreFilter, setGenreFilter] = useState('');
-  
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
-  const gamesPerPage = 20;
+  const [totalGames, setTotalGames] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [error, setError] = useState(null);
+  const [currentSearchQuery, setCurrentSearchQuery] = useState('');
 
-  const fetchGames = useCallback(async (page, query, genreFilters = []) => {
-    console.log(`Fetching games: page=${page}, query='${query}', genres=${genreFilters.join(',')}`);
+  // Fetch games from SteamUI API
+  const fetchGames = useCallback(async (page, searchQuery = '') => {
     setIsLoading(true);
-    
-    // Add minimum loading time to show skeleton
-    const minLoadTime = new Promise(resolve => setTimeout(resolve, 500));
+    setError(null);
     
     try {
       let result;
-      
-      if (query) {
-        // Use hybrid search for queries
-        setShowApiResults(true); // Always show API results view for searches
-        result = await invoke("hybrid_search", { query, page, pageSize: gamesPerPage });
+      if (searchQuery && searchQuery.trim() !== '') {
+        result = await invoke('search_steamui_games', { 
+          query: searchQuery.trim(), 
+          page 
+        });
       } else {
-        // Use regular catalogue browsing without search query
-        setShowApiResults(false);
-        if (genreFilters.length > 0) {
-          // Use genre filtering
-          result = await invoke("filter_games_by_genre", { genres: genreFilters, page, pageSize: gamesPerPage });
-        } else {
-          // Default: get all games
-          result = await invoke("get_games", { page, pageSize: gamesPerPage });
-        }
+        result = await invoke('fetch_steamui_games', { page });
       }
       
-      await minLoadTime;
-      
       setGames(result.games);
-      setTotalPages(Math.ceil(result.total / gamesPerPage));
+      setTotalPages(result.total_pages);
+      setTotalGames(result.total_games);
+      setHasMore(result.has_more);
+      
+      console.log(`✅ Loaded ${result.games.length} games (page ${result.current_page})`);
     } catch (error) {
-      console.error("Error fetching game data from backend:", error);
+      console.error('Failed to fetch games:', error);
+      setError(`Failed to load games: ${error}`);
       setGames([]);
-      setTotalPages(0);
     } finally {
-      console.log("Setting loading to false");
       setIsLoading(false);
     }
   }, []);
 
+  // Effect for initial load and page changes
   useEffect(() => {
-    // Fetch initial data
-    fetchGames(currentPage, globalSearchQuery, selectedGenres);
-  }, [currentPage, selectedGenres]); // Include selectedGenres dependency
+    fetchGames(currentPage, currentSearchQuery);
+  }, [currentPage, currentSearchQuery, fetchGames]);
 
-  useEffect(() => {
-    // Fetch genres once
-    const fetchFilters = async () => {
-      try {
-        const genresRes = await invoke("get_all_genres");
-        setGenres(genresRes);
-      } catch (error) {
-        console.error("Error fetching filters:", error);
-      }
-    };
-    fetchFilters();
-  }, []);
-
-  // Function to extract App ID from Steam URL
+  // Function to extract App ID from Steam URL or detect pure AppID
   const extractAppIdFromUrl = (input) => {
     if (!input) return null;
     
@@ -104,61 +79,49 @@ const Catalogue = () => {
     
     return null;
   };
-  
-    // Debounce search query changes
-    useEffect(() => {
-        if (globalSearchQuery.trim() === '') {
-            // If search is cleared, fetch immediately
-            setCurrentPage(1);
-            fetchGames(1, '', selectedGenres);
-            return;
-        }
 
-        // Check if the search query is a Steam URL or App ID
-        const extractedAppId = extractAppIdFromUrl(globalSearchQuery);
-        
-        if (extractedAppId) {
-            // Navigate directly to game detail page if it's a Steam URL or App ID
-            navigate(`/game/${extractedAppId}`);
-            return;
-        }
+  // Handle search on Enter key press
+  const handleSearchSubmit = useCallback(() => {
+    if (globalSearchQuery !== currentSearchQuery) {
+      // Check if the search query is a Steam URL or App ID
+      const extractedAppId = extractAppIdFromUrl(globalSearchQuery);
+      
+      if (extractedAppId) {
+        // Navigate directly to game detail page if it's a Steam URL or App ID
+        navigate(`/game/${extractedAppId}`);
+        return;
+      }
 
-        const handler = setTimeout(() => {
-            setCurrentPage(1); // Reset to first page on new search
-            fetchGames(1, globalSearchQuery, selectedGenres);
-        }, 500); // 500ms debounce
+      // Otherwise, perform normal search
+      setCurrentSearchQuery(globalSearchQuery);
+      setCurrentPage(1); // Reset to first page for new search
+    }
+  }, [globalSearchQuery, currentSearchQuery, navigate]);
 
-        return () => {
-            clearTimeout(handler);
-        };
-    }, [globalSearchQuery, navigate]); // Added navigate to deps
+  // Listen for Enter key in search input
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Enter' && document.activeElement?.type === 'text') {
+        handleSearchSubmit();
+      }
+    };
 
-    // In useEffect for page/genre changes
-    useEffect(() => {
-        // This effect handles browsing and pagination, but not initial search query
-        fetchGames(currentPage, '', selectedGenres);
-    }, [currentPage, selectedGenres]);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleSearchSubmit]);
 
-
-  const handleGenreChange = (genre) => {
-    setCurrentPage(1); // Reset to first page when genre filter changes
-    setSelectedGenres(prev =>
-      prev.includes(genre) ? prev.filter(g => g !== genre) : [...prev, genre]
-    );
+  const handleGameCardClick = (appId) => {
+    navigate(`/game/${appId}`);
   };
 
-
-  const filteredGenres = genres.filter(genre =>
-    genre.toLowerCase().includes(genreFilter.toLowerCase())
-  );
-
-  // Filtering is now done on the backend, so we just use the games directly
-  const gamesToShow = games;
-
-  const hasFilters = genres.length > 0;
-
   const handlePageChange = (pageNumber) => {
-    if (pageNumber >= 1 && pageNumber <= totalPages) {
+    if (pageNumber >= 1 && pageNumber !== currentPage) {
+      // For next page, check if we have more data
+      if (pageNumber > currentPage && pageNumber > totalPages && !hasMore) {
+        return; // Don't allow going to next page if no more data
+      }
       setCurrentPage(pageNumber);
     }
   };
@@ -166,164 +129,158 @@ const Catalogue = () => {
   const getPageNumbers = () => {
     const pageNumbers = [];
     const maxVisiblePages = 5;
-    if (totalPages <= maxVisiblePages) {
-      for (let i = 1; i <= totalPages; i++) pageNumbers.push(i);
-    } else {
-      if (currentPage <= 3) {
-        pageNumbers.push(1, 2, 3, 4, '...', totalPages);
-      } else if (currentPage >= totalPages - 2) {
-        pageNumbers.push(1, '...', totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
-      } else {
-        pageNumbers.push(1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages);
+    
+    // Show current page and a few around it, plus next if has_more
+    const startPage = Math.max(1, currentPage - 2);
+    const endPage = hasMore ? currentPage + 2 : Math.max(currentPage, totalPages);
+    
+    // Always show page 1
+    if (startPage > 1) {
+      pageNumbers.push(1);
+      if (startPage > 2) {
+        pageNumbers.push('...');
       }
     }
+    
+    // Show pages around current
+    for (let i = startPage; i <= endPage; i++) {
+      pageNumbers.push(i);
+    }
+    
+    // Show more pages indicator if has_more
+    if (hasMore && endPage === currentPage + 2) {
+      pageNumbers.push('...');
+    }
+    
     return pageNumbers;
-  };
-
-  const handleGameCardClick = (appId) => {
-    navigate(`/game/${appId}`);
   };
 
   return (
     <div className="ui-page">
-      <div className="ui-content">
-        <div className="catalogue-container">
-          <div className="catalogue-header">
-            {/* Global search bar is in Header.jsx */}
-          </div>
-          <div className="catalogue-body">
-            <div className={`game-list ${!hasFilters ? 'full-width' : ''}`}>
-              {isLoading ? (
-                /* Debug: Loading is true, showing skeleton */
-                <div className={`catalogue-skeleton-container ${!hasFilters ? 'full-width' : ''}`}>
-                  {[...Array(12)].map((_, index) => (
-                    <div key={index} className="catalogue-game-card-skeleton">
-                      <div className="game-image-skeleton"></div>
-                      <div className="game-info-skeleton">
-                        <div className="game-title-skeleton"></div>
-                        <div className="game-meta-skeleton"></div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <>
-                  {gamesToShow.length > 0 ? gamesToShow.map((game, index) => (
-                    <div 
-                      key={`${game.app_id}-${index}-${game.source || 'cat'}`} 
-                      className="game-card"
-                      onClick={() => handleGameCardClick(game.app_id)}
-                    >
-                      <img 
-                        src={game.header_image?.includes('/header.jpg') 
-                          ? game.header_image.replace('/header.jpg', '/library_hero.jpg')
-                          : game.header_image
-                        } 
-                        alt={game.name} 
-                        className="game-image" 
-                        loading="lazy" 
-                        width="231" 
-                        height="87"
-                        onError={(e) => {
-                          // Fallback to header.jpg if library_hero.jpg fails
-                          if (e.target.src.includes('/library_hero.jpg')) {
-                            e.target.src = e.target.src.replace('/library_hero.jpg', '/header.jpg');
-                          }
-                        }}
-                      />
-                      <div className="game-info">
-                        <h3>{game.name}</h3>
-                      </div>
-                    </div>
-                  )) : (
-                    <div className="no-results">
-                      <p>No results found for "{globalSearchQuery}"</p>
-                    </div>
-                  )}
-                  {totalPages > 1 && (
-                    <div className="pagination">
-                      <button className="pagination-btn" onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1}>Previous</button>
-                      <div className="pagination-numbers">
-                        {getPageNumbers().map((number, index) =>
-                          number === '...' ? (
-                            <span key={index} className="pagination-ellipsis">...</span>
-                          ) : (
-                            <button key={index} className={`pagination-number ${currentPage === number ? 'active' : ''}`} onClick={() => handlePageChange(number)}>{number}</button>
-                          )
-                        )}
-                      </div>
-                      <button className="pagination-btn" onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages}>Next</button>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-            {hasFilters && (
-              <div className="filter-sidebar">
-                {/* Active Filters Display */}
-                {selectedGenres.length > 0 && (
-                  <div className="active-filters">
-                    <div className="active-filters__header">
-                      <h4>Active Filters</h4>
-                      <button className="clear-all-btn" onClick={() => setSelectedGenres([])}>
-                        Clear All
-                      </button>
-                    </div>
-                    <div className="filter-pills">
-                      {selectedGenres.map((genre) => (
-                        <div key={genre} className="filter-pill">
-                          <div className="filter-pill__orb"></div>
-                          <span>{genre}</span>
-                          <button 
-                            className="filter-pill__remove"
-                            onClick={() => setSelectedGenres(prev => prev.filter(g => g !== genre))}
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="filter-section">
-                  <div className="filter-section__header">
-                    <div className="filter-section__orb"></div>
-                    <h4>Genres</h4>
-                  </div>
-                  
-                  {selectedGenres.length > 0 ? (
-                    <button className="filter-section__clear" onClick={() => setSelectedGenres([])}>
-                      Clear {selectedGenres.length} filter{selectedGenres.length > 1 ? 's' : ''}
-                    </button>
-                  ) : (
-                    <span className="filter-section__count">{genres.length} available</span>
-                  )}
-                  
-                  <input 
-                    type="text" 
-                    className="filter-search" 
-                    placeholder="Search genres..." 
-                    value={genreFilter} 
-                    onChange={(e) => setGenreFilter(e.target.value)} 
-                  />
-                  
-                  <div className="filter-list">
-                    {filteredGenres.map((genre) => (
-                      <label key={genre} className="filter-item">
-                        <input 
-                          type="checkbox" 
-                          checked={selectedGenres.includes(genre)} 
-                          onChange={() => handleGenreChange(genre)} 
-                        />
-                        <span className="filter-label">{genre}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
+      <div className="catalogue-body">
+        <div className="game-list full-width">
+          {isLoading ? (
+            <>
+              <div className="skeleton-info">
+                <div className="skeleton-info-text"></div>
+                 {globalSearchQuery && globalSearchQuery !== currentSearchQuery && (
+                   <div className="search-feedback">
+                     {extractAppIdFromUrl(globalSearchQuery) ? (
+                       <span>Press Enter to open App ID: {extractAppIdFromUrl(globalSearchQuery)}</span>
+                     ) : (
+                       <span>Press Enter to search for "{globalSearchQuery}"</span>
+                     )}
+                   </div>
+                 )}
               </div>
-            )}
-          </div>
+              <div className="skeleton-container">
+                {Array.from({ length: 12 }, (_, index) => (
+                  <div key={index} className="skeleton-game-card">
+                    <div className="skeleton-image"></div>
+                     <div className="skeleton-content">
+                       <div className="skeleton-title"></div>
+                     </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : error ? (
+            <div className="error-container">
+              <h3>Error Loading Games</h3>
+              <p>{error}</p>
+              <button onClick={() => fetchGames(currentPage, currentSearchQuery)}>
+                Try Again
+              </button>
+            </div>
+          ) : games.length > 0 ? (
+            <>
+              {games.map((game, index) => (
+                <div 
+                  key={`${game.app_id}-${index}`} 
+                  className="game-card"
+                  onClick={() => handleGameCardClick(game.app_id)}
+                >
+                  <div className="game-image-container">
+                    <img 
+                      src={game.header_image} 
+                      alt={game.name} 
+                      className="game-image" 
+                      loading="lazy" 
+                      width="231" 
+                      height="87"
+                      onError={(e) => {
+                        // Fallback to header.jpg if library_hero.jpg fails
+                        if (e.target.src.includes('/library_hero.jpg')) {
+                          e.target.src = `https://cdn.akamai.steamstatic.com/steam/apps/${game.app_id}/header.jpg`;
+                        }
+                      }}
+                    />
+                    {game.is_free && (
+                      <div className="free-badge">
+                        FREE
+                      </div>
+                    )}
+                  </div>
+                   <div className="game-info">
+                     <h3>{game.name}</h3>
+                     {game.is_free && (
+                       <div className="game-meta">
+                         <span className="free-tag">Free to Play</span>
+                       </div>
+                     )}
+                   </div>
+                </div>
+              ))}
+              
+              {/* Pagination */}
+              {(currentPage > 1 || hasMore) && (
+                <div className="pagination">
+                  <button 
+                    className="pagination-btn"
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </button>
+                  
+                  {getPageNumbers().map((pageNum, index) => (
+                    <button
+                      key={index}
+                      className={`pagination-btn ${pageNum === currentPage ? 'active' : ''} ${pageNum === '...' ? 'dots' : ''}`}
+                      onClick={() => typeof pageNum === 'number' && handlePageChange(pageNum)}
+                      disabled={pageNum === '...'}
+                    >
+                      {pageNum}
+                    </button>
+                  ))}
+                  
+                  <button 
+                    className="pagination-btn"
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={!hasMore}
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="no-results">
+              <div className="placeholder-content">
+                <h2>No Games Found</h2>
+                <p>Try searching for something else</p>
+                 {globalSearchQuery && (
+                   <p>
+                     {extractAppIdFromUrl(globalSearchQuery) ? (
+                       <>Press Enter to open App ID: {extractAppIdFromUrl(globalSearchQuery)}</>
+                     ) : (
+                       <>Press Enter to search for: "{globalSearchQuery}"</>
+                     )}
+                   </p>
+                 )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -331,4 +288,3 @@ const Catalogue = () => {
 };
 
 export default Catalogue;
-
