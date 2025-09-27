@@ -9,6 +9,7 @@ mod steam_utils;
 mod download;
 mod hydra_api;
 mod catalogue_commands;
+mod metadata_service;
 
 use crate::steam_utils::{find_steam_config_path, find_steam_executable_path, update_lua_files};
 use crate::download::{DownloadManagerState};
@@ -2177,6 +2178,10 @@ fn main() {
             catalogue_commands::search_catalogue_games,
             catalogue_commands::get_sample_catalogue_games,
             catalogue_commands::test_hydra_connection,
+            // Metadata Commands
+            metadata_service::get_metadata_resources,
+            metadata_service::get_filter_metadata,
+            metadata_service::test_metadata_connection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

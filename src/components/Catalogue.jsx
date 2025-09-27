@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
+import { useMetadata } from '../hooks/useMetadata';
+import FilterSection from './FilterSection';
+import FilterItem from './FilterItem';
 import './Catalogue.css';
 
 const Catalogue = () => {
@@ -13,9 +16,26 @@ const Catalogue = () => {
   const [totalCount, setTotalCount] = useState(0);
   const [pagination, setPagination] = useState(null);
   
+  // Filter state
+  const [selectedFilters, setSelectedFilters] = useState({
+    genres: [],
+    tags: [],
+    developers: [],
+    publishers: []
+  });
+  
   // Get search query and page from URL parameters
   const searchQuery = searchParams.get('search') || '';
   const currentPage = parseInt(searchParams.get('page')) || 1;
+  
+  // Use metadata hook
+  const {
+    isLoading: isMetadataLoading,
+    error: metadataError,
+    getFilterSections,
+    getGroupedFilters,
+    testConnection
+  } = useMetadata();
 
   // Fetch catalogue games using Hydra API (with optional search)
   const fetchCatalogueGames = useCallback(async (page = 1, query = '') => {
@@ -26,18 +46,30 @@ const Catalogue = () => {
       let response;
       
       if (query && query.trim().length >= 2) {
-        console.log(`🔍 Searching catalogue for: "${query}" (page: ${page})`);
-        response = await invoke('search_catalogue_games', {
+        console.log(`🔍 Searching catalogue for: "${query}" (page: ${page}) with filters:`, selectedFilters);
+        const searchParams = {
           query: query.trim(),
           page: page,
-          itemsPerPage: 20
-        });
+          itemsPerPage: 20,
+          genres: selectedFilters.genres,
+          tags: selectedFilters.tags,
+          developers: selectedFilters.developers,
+          publishers: selectedFilters.publishers
+        };
+        console.log('📤 Sending search to backend:', searchParams);
+        response = await invoke('search_catalogue_games', searchParams);
       } else {
-        console.log(`📚 Fetching catalogue page ${page}...`);
-        response = await invoke('get_paginated_catalogue', { 
+        console.log(`📚 Fetching catalogue page ${page} with filters:`, selectedFilters);
+        const catalogueParams = { 
           page: page,
-          itemsPerPage: 20
-        });
+          itemsPerPage: 20,
+          genres: selectedFilters.genres,
+          tags: selectedFilters.tags,
+          developers: selectedFilters.developers,
+          publishers: selectedFilters.publishers
+        };
+        console.log('📤 Sending to backend:', catalogueParams);
+        response = await invoke('get_paginated_catalogue', catalogueParams);
       }
       
       
@@ -53,22 +85,68 @@ const Catalogue = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [selectedFilters]);
 
   // Test Hydra connection
-  const testHydraConnection = useCallback(async () => {
+  const testConnections = useCallback(async () => {
     try {
       await invoke('test_hydra_connection');
+      console.log('✅ Hydra connection successful');
+      
+      await testConnection();
+      console.log('✅ Metadata connection successful');
     } catch (error) {
-      console.warn('API connection failed:', error);
+      console.error('❌ Connection test failed:', error);
     }
+  }, [testConnection]);
+
+  // Handle filter selection
+  const handleFilterSelect = useCallback((category, value) => {
+    console.log(`🔧 Filter select: ${category} = ${value}`);
+    setSelectedFilters(prev => {
+      const currentValues = prev[category] || [];
+      const isRemoving = currentValues.includes(value);
+      const newValues = isRemoving
+        ? currentValues.filter(v => v !== value)
+        : [...currentValues, value];
+      
+      console.log(`   Current: [${currentValues.join(', ')}]`);
+      console.log(`   Action: ${isRemoving ? 'REMOVE' : 'ADD'}`);
+      console.log(`   New: [${newValues.join(', ')}]`);
+      
+      return {
+        ...prev,
+        [category]: newValues
+      };
+    });
   }, []);
 
-  // Load data when URL parameters change
+  // Handle filter clear
+  const handleFilterClear = useCallback((category) => {
+    setSelectedFilters(prev => ({
+      ...prev,
+      [category]: []
+    }));
+  }, []);
+
+  // Handle individual filter remove
+  const handleFilterRemove = useCallback((category, value) => {
+    setSelectedFilters(prev => ({
+      ...prev,
+      [category]: prev[category].filter(v => v !== value)
+    }));
+  }, []);
+
+  // Debug: Log selectedFilters changes
   useEffect(() => {
-    testHydraConnection();
+    console.log('🎯 Selected filters changed:', JSON.stringify(selectedFilters, null, 2));
+  }, [selectedFilters]);
+
+  // Load data when URL parameters or filters change
+  useEffect(() => {
+    testConnections();
     fetchCatalogueGames(currentPage, searchQuery);
-  }, [currentPage, searchQuery, fetchCatalogueGames, testHydraConnection]);
+  }, [currentPage, searchQuery, selectedFilters, fetchCatalogueGames, testConnections]);
 
   // Smooth scroll to top when data changes (after loading is complete)
   useEffect(() => {
@@ -117,7 +195,7 @@ const Catalogue = () => {
             <div className="catalogue-filters-wrapper">
               {searchQuery && (
                 <div className="filter-item">
-                  <div className="filter-item__orb" style={{ backgroundColor: "#3e62c0" }}></div>
+                  <div className="filter-item__orb"></div>
                   <span>Search: "{searchQuery}"</span>
                   <button 
                     className="filter-item__remove-button"
@@ -152,7 +230,7 @@ const Catalogue = () => {
                 {/* Genres Filter Skeleton */}
                 <div className="filter-section">
                   <div className="filter-section__header">
-                    <div className="filter-section__orb" style={{ backgroundColor: "hsl(262deg 50% 47%)" }}></div>
+                    <div className="filter-section__orb"></div>
                     <h3 className="filter-section__title">Genres</h3>
                   </div>
                   <div className="filter-section-skeleton__count"></div>
@@ -167,7 +245,7 @@ const Catalogue = () => {
                 {/* Tags Filter Skeleton */}
                 <div className="filter-section">
                   <div className="filter-section__header">
-                    <div className="filter-section__orb" style={{ backgroundColor: "hsl(95deg 50% 20%)" }}></div>
+                    <div className="filter-section__orb"></div>
                     <h3 className="filter-section__title">Tags</h3>
                   </div>
                   <div className="filter-section-skeleton__count"></div>
@@ -205,29 +283,39 @@ const Catalogue = () => {
   return (
     <div className="ui-page">
       <div className="catalogue-body" ref={catalogueRef}>
-        {/* Header with active filters */}
-        <div className="catalogue-header">
-          <div className="catalogue-filters-wrapper">
-            {searchQuery && (
-              <div className="filter-item">
-                <div className="filter-item__orb" style={{ backgroundColor: "#3e62c0" }}></div>
-                <span>Search: "{searchQuery}"</span>
-                <button 
-                  className="filter-item__remove-button"
-                  onClick={() => navigate('/catalogue')}
-                  title="Clear search"
-                >
-                  ×
-                </button>
-              </div>
-            )}
+        {/* Header with active filters - Hydra style */}
+        <div className="catalogue__header">
+          <div className="catalogue__filters-wrapper">
+            <ul className="catalogue__filters-list">
+              {/* Search filter */}
+              {searchQuery && (
+                <li>
+                  <FilterItem
+                    filter={`Search: "${searchQuery}"`}
+                    orbColor="#3e62c0"
+                    onRemove={() => navigate('/catalogue')}
+                  />
+                </li>
+              )}
+              
+              {/* Active metadata filters */}
+              {getGroupedFilters(selectedFilters).map((filter, index) => (
+                <li key={`${filter.category}-${filter.value}-${index}`}>
+                  <FilterItem
+                    filter={filter.label}
+                    orbColor={filter.orbColor}
+                    onRemove={() => handleFilterRemove(filter.category, filter.value)}
+                  />
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
 
-        {/* Main content area */}
-        <div className="catalogue-content">
+        {/* Main content area - Hydra style */}
+        <div className="catalogue__content">
           {/* Games container */}
-          <div className="catalogue-games-container">
+          <div className="catalogue__games-container">
             {games.length > 0 ? (
               <>
                 {games.map((game) => (
@@ -310,61 +398,37 @@ const Catalogue = () => {
             )}
           </div>
 
-          {/* Filters sidebar */}
-          <div className="catalogue-filters-container">
-            <div className="catalogue-filters-sections">
-              {/* Genres Filter */}
-              <div className="filter-section">
-                <div className="filter-section__header">
-                  <div className="filter-section__orb" style={{ backgroundColor: "hsl(262deg 50% 47%)" }}></div>
-                  <h3 className="filter-section__title">Genres</h3>
-                </div>
-                <span className="filter-section__count">29 available</span>
-                <input 
-                  type="text" 
-                  className="filter-section__search" 
-                  placeholder="Filter..."
-                />
-                <div className="filter-section__items">
-                  <div className="filter-section__item">
-                    <input type="checkbox" id="action" />
-                    <label htmlFor="action">Action</label>
-                  </div>
-                  <div className="filter-section__item">
-                    <input type="checkbox" id="adventure" />
-                    <label htmlFor="adventure">Adventure</label>
-                  </div>
-                  <div className="filter-section__item">
-                    <input type="checkbox" id="rpg" />
-                    <label htmlFor="rpg">RPG</label>
-                  </div>
+          {/* Filters sidebar - Hydra style */}
+          <div className="catalogue__filters-container">
+            {isMetadataLoading ? (
+              <div className="catalogue__filters-sections">
+                <div className="metadata-loading">
+                  <div className="metadata-loading__spinner"></div>
+                  <span>Loading filters...</span>
                 </div>
               </div>
-
-              {/* Tags Filter */}
-              <div className="filter-section">
-                <div className="filter-section__header">
-                  <div className="filter-section__orb" style={{ backgroundColor: "hsl(95deg 50% 20%)" }}></div>
-                  <h3 className="filter-section__title">Tags</h3>
-                </div>
-                <span className="filter-section__count">447 available</span>
-                <input 
-                  type="text" 
-                  className="filter-section__search" 
-                  placeholder="Filter..."
-                />
-                <div className="filter-section__items">
-                  <div className="filter-section__item">
-                    <input type="checkbox" id="singleplayer" />
-                    <label htmlFor="singleplayer">Singleplayer</label>
-                  </div>
-                  <div className="filter-section__item">
-                    <input type="checkbox" id="multiplayer" />
-                    <label htmlFor="multiplayer">Multiplayer</label>
-                  </div>
+            ) : metadataError ? (
+              <div className="catalogue__filters-sections">
+                <div className="metadata-error">
+                  <span>Failed to load filters</span>
+                  <button onClick={() => testConnection()}>Retry</button>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="catalogue__filters-sections">
+                {/* Filter Sections - no active filters here, they're in header */}
+                {getFilterSections(selectedFilters).map((section) => (
+                  <FilterSection
+                    key={section.key}
+                    title={section.title}
+                    items={section.items}
+                    color={section.color}
+                    onSelect={(value) => handleFilterSelect(section.key, value)}
+                    onClear={() => handleFilterClear(section.key)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

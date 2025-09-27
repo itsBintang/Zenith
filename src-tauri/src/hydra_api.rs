@@ -1,7 +1,16 @@
 use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SearchFilters {
+    pub title: String,
+    pub genres: Vec<String>,
+    pub tags: Vec<String>,
+    pub developers: Vec<String>,
+    pub publishers: Vec<String>,
+    pub download_source_fingerprints: Vec<String>,
+}
 
 // Hydra API client for fetching game catalogue data
 pub struct HydraApi {
@@ -290,12 +299,52 @@ pub struct PaginationInfo {
     pub has_prev_page: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SearchFilters {
-    pub genres: Vec<String>,
-    pub developers: Vec<String>,
-    pub publishers: Vec<String>,
-    pub download_source_fingerprints: Vec<String>,
+impl HydraApi {
+    /// Search games with filters and pagination (like Hydra)
+    pub async fn search_games_paginated_with_filters(
+        &self,
+        filters: SearchFilters,
+        page: u32,
+        items_per_page: u32,
+    ) -> Result<PaginatedCatalogueResponse> {
+        let skip = (page - 1) * items_per_page;
+
+        let payload = serde_json::json!({
+            "title": filters.title,
+            "take": items_per_page,
+            "skip": skip,
+            "downloadSourceFingerprints": filters.download_source_fingerprints,
+            "publishers": filters.publishers,
+            "genres": filters.genres,
+            "developers": filters.developers,
+            "tags": filters.tags.iter().map(|t| t.parse::<u32>().unwrap_or(0)).collect::<Vec<u32>>()
+        });
+
+        println!("🔍 Searching with filters: {:?}", payload);
+
+        let response = self
+            .client
+            .post(&format!("{}/catalogue/search", self.base_url))
+            .json(&payload)
+            .send()
+            .await?;
+
+        let results: CatalogueResponse = response.json().await?;
+
+        Ok(PaginatedCatalogueResponse {
+            games: results.edges.into_iter()
+                .map(|hydra_game| crate::catalogue_commands::CatalogueGame::from(hydra_game))
+                .collect(),
+            pagination: PaginationInfo {
+                current_page: page,
+                total_pages: (results.count as f64 / items_per_page as f64).ceil() as u32,
+                total_items: results.count,
+                items_per_page,
+                has_next_page: skip + items_per_page < results.count,
+                has_prev_page: page > 1,
+            },
+        })
+    }
 }
 
 // Lazy static instance for reuse

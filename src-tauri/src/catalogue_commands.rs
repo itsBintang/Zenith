@@ -62,17 +62,37 @@ pub async fn get_catalogue_list(
     }
 }
 
-/// Get paginated catalogue (like Hydra's pagination)
+/// Get paginated catalogue with filters (like Hydra's pagination)
 #[command]
 pub async fn get_paginated_catalogue(
     page: u32,
     items_per_page: Option<u32>,
+    genres: Option<Vec<String>>,
+    tags: Option<Vec<String>>,
+    developers: Option<Vec<String>>,
+    publishers: Option<Vec<String>>,
 ) -> Result<PaginatedCatalogueResponse, String> {
     // Fetching catalogue data
     
     let items_per_page = items_per_page.unwrap_or(20);
     
-    match HYDRA_API.get_paginated_catalogue(page, items_per_page).await {
+    // Create filter payload like Hydra
+    let filters = crate::hydra_api::SearchFilters {
+        title: String::new(), // Empty for pagination
+        genres: genres.clone().unwrap_or_default(),
+        tags: tags.clone().unwrap_or_default(),
+        developers: developers.clone().unwrap_or_default(),
+        publishers: publishers.clone().unwrap_or_default(),
+        download_source_fingerprints: Vec::new(), // Not used for now
+    };
+    
+    println!("🔧 Backend received filters:");
+    println!("   genres: {:?}", genres);
+    println!("   tags: {:?}", tags);
+    println!("   developers: {:?}", developers);
+    println!("   publishers: {:?}", publishers);
+
+    match HYDRA_API.search_games_paginated_with_filters(filters, page, items_per_page).await {
         Ok(response) => {
             // Debug: Log first game data being sent to frontend
             if let Some(first_game) = response.games.first() {
@@ -96,13 +116,34 @@ pub async fn search_catalogue_games(
     query: String,
     page: Option<u32>,
     items_per_page: Option<u32>,
+    genres: Option<Vec<String>>,
+    tags: Option<Vec<String>>,
+    developers: Option<Vec<String>>,
+    publishers: Option<Vec<String>>,
 ) -> Result<PaginatedCatalogueResponse, String> {
     // Searching catalogue games
     
     let page = page.unwrap_or(1);
     let items_per_page = items_per_page.unwrap_or(20);
     
-    match HYDRA_API.search_games_paginated(query, page, items_per_page).await {
+    // Create filter payload like Hydra
+    let filters = SearchFilters {
+        title: query.clone(),
+        genres: genres.clone().unwrap_or_default(),
+        tags: tags.clone().unwrap_or_default(),
+        developers: developers.clone().unwrap_or_default(),
+        publishers: publishers.clone().unwrap_or_default(),
+        download_source_fingerprints: Vec::new(), // Not used for now
+    };
+    
+    println!("🔧 Search backend received:");
+    println!("   query: {:?}", query);
+    println!("   genres: {:?}", genres);
+    println!("   tags: {:?}", tags);
+    println!("   developers: {:?}", developers);
+    println!("   publishers: {:?}", publishers);
+
+    match HYDRA_API.search_games_paginated_with_filters(filters, page, items_per_page).await {
         Ok(response) => {
             // Debug: Log first search result
             if let Some(first_game) = response.games.first() {
