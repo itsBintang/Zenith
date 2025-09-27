@@ -548,7 +548,7 @@ struct InitProgress {
 }
 
 #[command]
-async fn initialize_app(app: tauri::AppHandle) -> Result<Vec<InitProgress>, String> {
+async fn initialize_app(_app: tauri::AppHandle) -> Result<Vec<InitProgress>, String> {
     let mut progress_steps = Vec::new();
 
     // Step 1: Check Steam installation

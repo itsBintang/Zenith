@@ -363,7 +363,6 @@ impl CacheMetadata {
 pub struct UserProfile {
     pub id: i32,
     pub name: String,
-    pub bio: Option<String>,
     pub steam_id: Option<String>,
     pub banner_path: Option<String>,
     pub avatar_path: Option<String>,
@@ -377,12 +376,11 @@ pub struct UserProfile {
 
 impl UserProfile {
     /// Create new user profile with TTL
-    pub fn new(name: String, bio: Option<String>) -> Self {
+    pub fn new(name: String) -> Self {
         let now = Utc::now().timestamp();
         Self {
             id: 1, // Single profile entry
             name,
-            bio,
             steam_id: None,
             banner_path: None,
             avatar_path: None,
@@ -419,16 +417,15 @@ impl UserProfile {
         Ok(Self {
             id: row.get(0)?,
             name: row.get(1)?,
-            bio: row.get(2)?,
-            steam_id: row.get(3)?,
-            banner_path: row.get(4)?,
-            avatar_path: row.get(5)?,
-            created_at: row.get(6)?,
-            updated_at: row.get(7)?,
-            cached_at: row.get(8).unwrap_or_else(|_| Utc::now().timestamp()),
-            expires_at: row.get(9).unwrap_or_else(|_| Utc::now().timestamp() + 31536000), // 1 year
-            is_backed_up: row.get::<_, i32>(10).unwrap_or(0) == 1,
-            backup_created_at: row.get(11).unwrap_or(0),
+            steam_id: row.get(2)?,
+            banner_path: row.get(3)?,
+            avatar_path: row.get(4)?,
+            created_at: row.get(5)?,
+            updated_at: row.get(6)?,
+            cached_at: row.get(7).unwrap_or_else(|_| Utc::now().timestamp()),
+            expires_at: row.get(8).unwrap_or_else(|_| Utc::now().timestamp() + 31536000), // 1 year
+            is_backed_up: row.get::<_, i32>(9).unwrap_or(0) == 1,
+            backup_created_at: row.get(10).unwrap_or(0),
         })
     }
 

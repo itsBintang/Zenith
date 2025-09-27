@@ -250,9 +250,6 @@ function UserProfile() {
                 <h1 className="profile-user-name">{profile?.name || 'User'}</h1>
                 <span className="profile-user-badge">ADMIN</span>
               </div>
-              {profile?.bio && (
-                <p className="profile-user-bio">{profile.bio}</p>
-              )}
             </div>
           </div>
           <div className="profile-main-actions">

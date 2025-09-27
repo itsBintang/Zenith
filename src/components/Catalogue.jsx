@@ -1,19 +1,21 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate, useOutletContext } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import './Catalogue.css';
 
 const Catalogue = () => {
   const navigate = useNavigate();
-  const { globalSearchQuery } = useOutletContext();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [games, setGames] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const [totalGames, setTotalGames] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState(null);
-  const [currentSearchQuery, setCurrentSearchQuery] = useState('');
+  
+  // Get current state from URL parameters
+  const currentPage = parseInt(searchParams.get('page')) || 1;
+  const currentSearchQuery = searchParams.get('search') || '';
 
   // Fetch games from SteamUI API
   const fetchGames = useCallback(async (page, searchQuery = '') => {
@@ -79,63 +81,6 @@ const Catalogue = () => {
     return null;
   };
 
-  // Handle search on Enter key press
-  const handleSearchSubmit = useCallback(() => {
-    if (globalSearchQuery !== currentSearchQuery) {
-      // Check if the search query is a Steam URL or App ID
-      const extractedAppId = extractAppIdFromUrl(globalSearchQuery);
-      
-      if (extractedAppId) {
-        // Navigate directly to game detail page if it's a Steam URL or App ID
-        navigate(`/game/${extractedAppId}`);
-        return;
-      }
-
-      // Otherwise, perform normal search
-      setCurrentSearchQuery(globalSearchQuery);
-      setCurrentPage(1); // Reset to first page for new search
-    }
-  }, [globalSearchQuery, currentSearchQuery, navigate]);
-
-  // Listen for Enter key in search input
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (event.key === 'Enter' && document.activeElement?.type === 'text') {
-        handleSearchSubmit();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [handleSearchSubmit]);
-
-  // Listen for global search trigger from Header
-  useEffect(() => {
-    const handleTriggerSearch = (event) => {
-      const { query } = event.detail;
-      
-      if (query && query.trim() !== '') {
-        // Check if it's AppID (shouldn't happen here, but just in case)
-        const extractedAppId = extractAppIdFromUrl(query);
-        if (extractedAppId) {
-          navigate(`/game/${extractedAppId}`);
-          return;
-        }
-        
-        // Perform name search
-        setCurrentSearchQuery(query.trim());
-        setCurrentPage(1);
-      }
-    };
-
-    window.addEventListener('triggerSearch', handleTriggerSearch);
-    
-    return () => {
-      window.removeEventListener('triggerSearch', handleTriggerSearch);
-    };
-  }, [navigate]);
 
   const handleGameCardClick = (appId) => {
     navigate(`/game/${appId}`);
@@ -147,7 +92,14 @@ const Catalogue = () => {
       if (pageNumber > currentPage && pageNumber > totalPages && !hasMore) {
         return; // Don't allow going to next page if no more data
       }
-      setCurrentPage(pageNumber);
+      
+      // Update URL with new page number while preserving search
+      const newParams = new URLSearchParams();
+      if (currentSearchQuery) {
+        newParams.set('search', currentSearchQuery);
+      }
+      newParams.set('page', pageNumber.toString());
+      setSearchParams(newParams);
     }
   };
 
@@ -188,15 +140,6 @@ const Catalogue = () => {
             <>
               <div className="skeleton-info">
                 <div className="skeleton-info-text"></div>
-                 {globalSearchQuery && globalSearchQuery !== currentSearchQuery && (
-                   <div className="search-feedback">
-                     {extractAppIdFromUrl(globalSearchQuery) ? (
-                       <span>Press Enter to open App ID: {extractAppIdFromUrl(globalSearchQuery)}</span>
-                     ) : (
-                       <span>Press Enter to search for "{globalSearchQuery}"</span>
-                     )}
-                   </div>
-                 )}
               </div>
               <div className="skeleton-container">
                 {Array.from({ length: 12 }, (_, index) => (
@@ -294,15 +237,6 @@ const Catalogue = () => {
               <div className="placeholder-content">
                 <h2>No Games Found</h2>
                 <p>Try searching for something else</p>
-                 {globalSearchQuery && (
-                   <p>
-                     {extractAppIdFromUrl(globalSearchQuery) ? (
-                       <>Press Enter to open App ID: {extractAppIdFromUrl(globalSearchQuery)}</>
-                     ) : (
-                       <>Press Enter to search for: "{globalSearchQuery}"</>
-                     )}
-                   </p>
-                 )}
               </div>
             </div>
           )}

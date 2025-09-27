@@ -284,8 +284,7 @@ pub async fn get_user_profile() -> Result<crate::database::models::UserProfile, 
             None => {
                 // Create default profile if none exists
                 let default_profile = crate::database::models::UserProfile::new(
-                    "User".to_string(), 
-                    Some("Steam User".to_string())
+                    "User".to_string()
                 );
                 UserProfileOperations::upsert(conn, &default_profile)?;
                 Ok(default_profile)
@@ -428,8 +427,7 @@ pub async fn reset_profile_to_default() -> Result<(), String> {
     db_manager.with_connection(|conn| {
         // Reset to default profile
         let default_profile = crate::database::models::UserProfile::new(
-            "User".to_string(), 
-            Some("Steam User".to_string())
+                    "User".to_string()
         );
         UserProfileOperations::upsert(conn, &default_profile)
     }).map_err(|e| e.to_string())?;
@@ -758,7 +756,7 @@ fn find_newest_manifests(
 pub async fn update_game_files_enhanced(
     app_id: String,
     game_name: String,
-    strategy: Option<String>,
+    _strategy: Option<String>,
 ) -> Result<UpdateResult, String> {
     println!("🚀 Starting smart update for {}", game_name);
 

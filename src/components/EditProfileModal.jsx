@@ -5,8 +5,7 @@ import '../styles/EditProfileModal.css';
 
 function EditProfileModal({ isOpen, onClose, profile, onProfileUpdate }) {
   const [formData, setFormData] = useState({
-    name: '',
-    bio: ''
+    name: ''
   });
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -20,8 +19,7 @@ function EditProfileModal({ isOpen, onClose, profile, onProfileUpdate }) {
   useEffect(() => {
     if (profile) {
       setFormData({
-        name: profile.name || '',
-        bio: profile.bio || '' // Bio can be empty string or null, both are valid
+        name: profile.name || ''
       });
     }
   }, [profile]);
@@ -69,10 +67,6 @@ function EditProfileModal({ isOpen, onClose, profile, onProfileUpdate }) {
       newErrors.name = 'Name is required';
     } else if (formData.name.trim().length < 2) {
       newErrors.name = 'Name must be at least 2 characters';
-    }
-    
-    if (formData.bio && formData.bio.length > 200) {
-      newErrors.bio = 'Bio must be less than 200 characters';
     }
     
     setErrors(newErrors);
@@ -193,15 +187,9 @@ function EditProfileModal({ isOpen, onClose, profile, onProfileUpdate }) {
     try {
       console.log('Saving profile with data:', formData);
       
-      // Update each field individually
+      // Update name field
       await invoke('update_profile_field', { field: 'name', value: formData.name.trim() });
       console.log('Name updated successfully');
-      
-      // Always update bio, even if it's empty (this allows clearing the bio)
-      const bioValue = formData.bio.trim() === '' ? null : formData.bio.trim();
-      console.log('Updating bio with value:', bioValue);
-      await invoke('update_profile_field', { field: 'bio', value: bioValue });
-      console.log('Bio updated successfully');
       
       // Notify parent component to refresh profile
       if (onProfileUpdate) {
@@ -312,24 +300,6 @@ function EditProfileModal({ isOpen, onClose, profile, onProfileUpdate }) {
                   maxLength={50}
                 />
                 {errors.name && <span className="edit-profile-error">{errors.name}</span>}
-              </div>
-              
-              <div className="edit-profile-field">
-                <label htmlFor="profile-bio">Bio (Optional)</label>
-                <textarea
-                  id="profile-bio"
-                  value={formData.bio}
-                  onChange={(e) => handleInputChange('bio', e.target.value)}
-                  placeholder="Tell others about yourself... (Leave blank if you prefer)"
-                  className={errors.bio ? 'error' : ''}
-                  disabled={isSaving}
-                  maxLength={200}
-                  rows={3}
-                />
-                <div className="edit-profile-char-count">
-                  {formData.bio.length}/200 characters
-                </div>
-                {errors.bio && <span className="edit-profile-error">{errors.bio}</span>}
               </div>
               
             </div>

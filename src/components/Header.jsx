@@ -76,20 +76,14 @@ function Header({ globalSearchQuery, setGlobalSearchQuery }) {
         return;
       }
       
-      // For name search, ensure we're on catalogue and trigger search
-      if (location.pathname !== '/catalogue') {
-        navigate('/catalogue');
-        // Add delay to ensure catalogue component is mounted before triggering search
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('triggerSearch', { 
-            detail: { query } 
-          }));
-        }, 100); // Small delay to ensure component is ready
+      // For name search, navigate to catalogue with URL parameters
+      if (query) {
+        const searchParams = new URLSearchParams();
+        searchParams.set('search', query);
+        searchParams.set('page', '1');
+        navigate(`/catalogue?${searchParams.toString()}`);
       } else {
-        // Already on catalogue, trigger search immediately
-        window.dispatchEvent(new CustomEvent('triggerSearch', { 
-          detail: { query } 
-        }));
+        navigate('/catalogue');
       }
     }
   };

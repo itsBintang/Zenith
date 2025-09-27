@@ -2,7 +2,7 @@ use anyhow::Result;
 use rusqlite::Connection;
 
 /// Current database schema version
-const CURRENT_SCHEMA_VERSION: i32 = 5;
+const CURRENT_SCHEMA_VERSION: i32 = 6;
 
 /// Run all necessary database migrations
 pub fn run_migrations(conn: &Connection) -> Result<()> {
@@ -69,6 +69,7 @@ fn migrate_to_version(conn: &Connection, version: i32) -> Result<()> {
         3 => migrate_to_v3(conn),
         4 => migrate_to_v4(conn),
         5 => migrate_to_v5(conn),
+        6 => migrate_to_v6(conn),
         _ => Err(anyhow::anyhow!("Unknown migration version: {}", version)),
     }
 }
@@ -173,7 +174,6 @@ fn migrate_to_v3(conn: &Connection) -> Result<()> {
             "CREATE TABLE user_profile (
                 id INTEGER PRIMARY KEY DEFAULT 1,
                 name TEXT NOT NULL DEFAULT 'Nazril',
-                bio TEXT DEFAULT 'Steam User',
                 steam_id TEXT,
                 banner_path TEXT,
                 avatar_path TEXT,
@@ -191,7 +191,7 @@ fn migrate_to_v3(conn: &Connection) -> Result<()> {
         
         // Insert default user profile
         conn.execute(
-            "INSERT INTO user_profile (id, name, bio) VALUES (1, 'User', 'Steam User')",
+            "INSERT INTO user_profile (id, name) VALUES (1, 'User')",
             [],
         )?;
     }
@@ -335,23 +335,22 @@ fn migrate_v5_internal(conn: &Connection) -> Result<()> {
     )?;
     
     if !backup_table_exists {
-        conn.execute(
-            "CREATE TABLE user_profile_backup (
-                id INTEGER PRIMARY KEY DEFAULT 1,
-                name TEXT NOT NULL DEFAULT 'User',
-                bio TEXT DEFAULT 'Steam User', 
-                steam_id TEXT,
-                banner_path TEXT,
-                avatar_path TEXT,
-                created_at INTEGER DEFAULT 0,
-                updated_at INTEGER DEFAULT 0,
-                cached_at INTEGER DEFAULT 0,
-                expires_at INTEGER DEFAULT 0,
-                backup_created_at INTEGER DEFAULT 0,
-                backup_reason TEXT DEFAULT 'manual'
-            )",
-            [],
-        )?;
+            conn.execute(
+                "CREATE TABLE user_profile_backup (
+                    id INTEGER PRIMARY KEY DEFAULT 1,
+                    name TEXT NOT NULL DEFAULT 'User',
+                    steam_id TEXT,
+                    banner_path TEXT,
+                    avatar_path TEXT,
+                    created_at INTEGER DEFAULT 0,
+                    updated_at INTEGER DEFAULT 0,
+                    cached_at INTEGER DEFAULT 0,
+                    expires_at INTEGER DEFAULT 0,
+                    backup_created_at INTEGER DEFAULT 0,
+                    backup_reason TEXT DEFAULT 'manual'
+                )",
+                [],
+            )?;
         
         // Create backup from existing profile data
         let profile_exists: bool = conn.query_row(
@@ -363,9 +362,9 @@ fn migrate_v5_internal(conn: &Connection) -> Result<()> {
         if profile_exists {
             conn.execute(
                 "INSERT INTO user_profile_backup 
-                 (id, name, bio, steam_id, banner_path, avatar_path, created_at, updated_at, 
+                 (id, name, steam_id, banner_path, avatar_path, created_at, updated_at, 
                   cached_at, expires_at, backup_created_at, backup_reason)
-                 SELECT id, name, bio, steam_id, banner_path, avatar_path, created_at, updated_at,
+                 SELECT id, name, steam_id, banner_path, avatar_path, created_at, updated_at,
                         ?1, ?2, ?1, 'migration_v5'
                  FROM user_profile WHERE id = 1",
                 [now, expires_in_year],
@@ -451,4 +450,114 @@ impl std::fmt::Display for DatabaseInfo {
         writeln!(f, "  Tables: {}", self.tables.join(", "))?;
         Ok(())
     }
+}
+
+/// Migration to version 6: Remove bio column from user profile tables
+fn migrate_to_v6(conn: &Connection) -> Result<()> {
+    println!("Removing bio column from user profile tables (v6)...");
+    
+    // Check if bio column exists in user_profile table
+    let bio_exists: bool = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('user_profile') WHERE name='bio'",
+        [],
+        |row| Ok(row.get::<_, i32>(0)? > 0)
+    )?;
+    
+    if bio_exists {
+        // SQLite doesn't support DROP COLUMN directly, so we need to recreate the table
+        
+        // 1. Create new table without bio column
+        conn.execute(
+            "CREATE TABLE user_profile_new (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                name TEXT NOT NULL DEFAULT 'User',
+                steam_id TEXT,
+                banner_path TEXT,
+                avatar_path TEXT,
+                created_at INTEGER DEFAULT 0,
+                updated_at INTEGER DEFAULT 0,
+                cached_at INTEGER DEFAULT 0,
+                expires_at INTEGER DEFAULT 0,
+                is_backed_up INTEGER DEFAULT 0,
+                backup_created_at INTEGER DEFAULT 0
+            )",
+            [],
+        )?;
+        
+        // 2. Copy data from old table to new table (excluding bio)
+        conn.execute(
+            "INSERT INTO user_profile_new 
+             (id, name, steam_id, banner_path, avatar_path, created_at, updated_at, 
+              cached_at, expires_at, is_backed_up, backup_created_at)
+             SELECT id, name, steam_id, banner_path, avatar_path, created_at, updated_at,
+                    cached_at, expires_at, is_backed_up, backup_created_at
+             FROM user_profile",
+            [],
+        )?;
+        
+        // 3. Drop old table
+        conn.execute("DROP TABLE user_profile", [])?;
+        
+        // 4. Rename new table
+        conn.execute("ALTER TABLE user_profile_new RENAME TO user_profile", [])?;
+        
+        // 5. Recreate index
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_user_profile_updated_at ON user_profile(updated_at)",
+            [],
+        )?;
+    }
+    
+    // Do the same for backup table if it exists
+    let backup_bio_exists: bool = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('user_profile_backup') WHERE name='bio'",
+        [],
+        |row| Ok(row.get::<_, i32>(0)? > 0)
+    ).unwrap_or(false);
+    
+    if backup_bio_exists {
+        // Create new backup table without bio
+        conn.execute(
+            "CREATE TABLE user_profile_backup_new (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                name TEXT NOT NULL DEFAULT 'User',
+                steam_id TEXT,
+                banner_path TEXT,
+                avatar_path TEXT,
+                created_at INTEGER DEFAULT 0,
+                updated_at INTEGER DEFAULT 0,
+                cached_at INTEGER DEFAULT 0,
+                expires_at INTEGER DEFAULT 0,
+                backup_created_at INTEGER DEFAULT 0,
+                backup_reason TEXT DEFAULT 'manual'
+            )",
+            [],
+        )?;
+        
+        // Copy data if backup table has data
+        let has_backup_data: bool = conn.query_row(
+            "SELECT COUNT(*) FROM user_profile_backup",
+            [],
+            |row| Ok(row.get::<_, i32>(0)? > 0)
+        ).unwrap_or(false);
+        
+        if has_backup_data {
+            conn.execute(
+                "INSERT INTO user_profile_backup_new 
+                 (id, name, steam_id, banner_path, avatar_path, created_at, updated_at,
+                  cached_at, expires_at, backup_created_at, backup_reason)
+                 SELECT id, name, steam_id, banner_path, avatar_path, created_at, updated_at,
+                        cached_at, expires_at, backup_created_at, backup_reason
+                 FROM user_profile_backup",
+                [],
+            )?;
+        }
+        
+        // Drop and rename backup table
+        conn.execute("DROP TABLE user_profile_backup", [])?;
+        conn.execute("ALTER TABLE user_profile_backup_new RENAME TO user_profile_backup", [])?;
+    }
+    
+    println!("Bio column removal migration completed successfully");
+    Ok(())
 }

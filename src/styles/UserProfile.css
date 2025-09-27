@@ -116,13 +116,6 @@
   text-transform: uppercase;
 }
 
-.profile-user-bio {
-  margin: 0.5rem 0 0 0;
-  color: var(--hydra-text-body); /* Changed */
-  font-size: 0.9rem;
-  line-height: 1.4;
-  max-width: 400px;
-}
 .profile-user-handle {
   display: flex;
   align-items: center;
