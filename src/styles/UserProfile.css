@@ -106,14 +106,19 @@
 }
 
 .profile-user-badge {
-  background: linear-gradient(45deg, var(--hydra-brand-blue), var(--hydra-brand-teal)); /* Changed */
+  background: linear-gradient(45deg, #a855f7, #ec4899);
   color: white;
-  padding: 0.25rem 0.75rem;
-  border-radius: 6px;
-  font-size: 0.7rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 9999px;
+  font-size: 0.8rem;
   font-weight: 700;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
+  box-shadow: 0 4px 14px 0 rgba(236, 72, 153, 0.3);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  vertical-align: middle;
 }
 
 .profile-user-handle {

@@ -2,10 +2,10 @@ import React from "react";
 
 function FeaturedBanner({ onGameSelect }) {
   const featuredGame = {
-    app_id: "1030300",
-    title: "Hollow Knight: Silksong",
-    description: "Discover a vast, haunted kingdom in Hollow Knight: Silksong! Explore, fight and survive as you ascend to the peak of a land ruled by silk and song.",
-    banner_image: "https://cdn.akamai.steamstatic.com/steam/apps/1030300/library_hero.jpg"
+    app_id: "2947440",
+    title: "SILENT HILL f",
+    description: "Hinako's hometown is engulfed in fog, driving her to fight grotesque monsters and solve eerie puzzles. Uncover the disturbing beauty hidden in terror.",
+    banner_image: "https://cdn.akamai.steamstatic.com/steam/apps/2947440/library_hero.jpg"
   };
 
   return (

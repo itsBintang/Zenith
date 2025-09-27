@@ -79,100 +79,120 @@ function EditProfileModal({ isOpen, onClose, profile, onProfileUpdate }) {
       return;
     }
     
-    setIsUploading(true);
-    
-    // Fail-safe: reset uploading state after 60 seconds no matter what
-    const failsafeTimeout = setTimeout(() => {
-      console.warn('Upload fail-safe triggered - resetting upload state');
-      setIsUploading(false);
-    }, 60000);
-    
     try {
       // Create file input element
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'image/*';
       
-      input.onchange = async (event) => {
-        const file = event.target.files[0];
-        if (!file) {
-          setIsUploading(false);
-          return;
-        }
+      // Handle file selection (including cancellation)
+      const fileSelected = await new Promise((resolve) => {
+        input.onchange = (event) => {
+          const file = event.target.files[0];
+          resolve(file);
+        };
         
+        // Handle cancellation - when user closes dialog without selecting
+        input.oncancel = () => {
+          resolve(null);
+        };
+        
+        // Alternative cancellation detection using focus events
+        const handleFocus = () => {
+          setTimeout(() => {
+            if (!input.files || input.files.length === 0) {
+              resolve(null);
+            }
+          }, 300); // Small delay to allow file selection to register
+        };
+        
+        window.addEventListener('focus', handleFocus, { once: true });
+        
+        input.click();
+      });
+      
+      // If no file selected (user cancelled), return early
+      if (!fileSelected) {
+        console.log('File selection cancelled by user');
+        return;
+      }
+      
+      // Now set uploading state since we have a file
+      setIsUploading(true);
+      
+      // Fail-safe: reset uploading state after 60 seconds
+      const failsafeTimeout = setTimeout(() => {
+        console.warn('Upload fail-safe triggered - resetting upload state');
+        setIsUploading(false);
+      }, 60000);
+      
+      try {
         // Validate file size (max 5MB)
-        if (file.size > 5 * 1024 * 1024) {
+        if (fileSelected.size > 5 * 1024 * 1024) {
           alert('Image size must be less than 5MB');
-          setIsUploading(false);
           return;
         }
         
         // Validate file type
-        if (!file.type.startsWith('image/')) {
+        if (!fileSelected.type.startsWith('image/')) {
           alert('Please select a valid image file');
-          setIsUploading(false);
           return;
         }
         
-        try {
-          console.log(`Starting ${imageType} upload, file size:`, file.size);
-          
-          // Convert file to array buffer
-          const arrayBuffer = await file.arrayBuffer();
-          const uint8Array = new Uint8Array(arrayBuffer);
-          
-          console.log(`Converted to array buffer, uploading ${imageType}...`);
-          
-          // Upload to backend with timeout
-          const uploadPromise = invoke('upload_profile_image', {
-            imageData: Array.from(uint8Array),
-            imageType: imageType
-          });
-          
-          // 30 second timeout
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Upload timeout after 30 seconds')), 30000)
-          );
-          
-          const imagePath = await Promise.race([uploadPromise, timeoutPromise]);
-          console.log(`${imageType} uploaded successfully:`, imagePath);
-          
-          // Update preview
-          console.log(`Loading updated ${imageType} preview...`);
-          const newBase64 = await invoke('get_profile_image_base64', { imageType: imageType });
-          setPreviewImages(prev => ({
-            ...prev,
-            [imageType]: newBase64
-          }));
-          
-          console.log(`${imageType} upload completed successfully`);
-        } catch (error) {
-          console.error(`Failed to upload ${imageType}:`, error);
-          
-          // Show more specific error messages
-          let errorMessage = `Failed to upload ${imageType}.`;
-          if (error.message) {
-            if (error.message.includes('timeout')) {
-              errorMessage += ' Upload timed out. Please try with a smaller image.';
-            } else if (error.message.includes('too large')) {
-              errorMessage += ' Image file is too large. Maximum size is 10MB.';
-            } else {
-              errorMessage += ` Error: ${error.message}`;
-            }
+        console.log(`Starting ${imageType} upload, file size:`, fileSelected.size);
+        
+        // Convert file to array buffer
+        const arrayBuffer = await fileSelected.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        
+        console.log(`Converted to array buffer, uploading ${imageType}...`);
+        
+        // Upload to backend with timeout
+        const uploadPromise = invoke('upload_profile_image', {
+          imageData: Array.from(uint8Array),
+          imageType: imageType
+        });
+        
+        // 30 second timeout
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Upload timeout after 30 seconds')), 30000)
+        );
+        
+        const imagePath = await Promise.race([uploadPromise, timeoutPromise]);
+        console.log(`${imageType} uploaded successfully:`, imagePath);
+        
+        // Update preview
+        console.log(`Loading updated ${imageType} preview...`);
+        const newBase64 = await invoke('get_profile_image_base64', { imageType: imageType });
+        setPreviewImages(prev => ({
+          ...prev,
+          [imageType]: newBase64
+        }));
+        
+        console.log(`${imageType} upload completed successfully`);
+      } catch (error) {
+        console.error(`Failed to upload ${imageType}:`, error);
+        
+        // Show more specific error messages
+        let errorMessage = `Failed to upload ${imageType}.`;
+        if (error.message) {
+          if (error.message.includes('timeout')) {
+            errorMessage += ' Upload timed out. Please try with a smaller image.';
+          } else if (error.message.includes('too large')) {
+            errorMessage += ' Image file is too large. Maximum size is 10MB.';
+          } else {
+            errorMessage += ` Error: ${error.message}`;
           }
-          errorMessage += ' Please try again.';
-          
-          alert(errorMessage);
-        } finally {
-          clearTimeout(failsafeTimeout);
-          setIsUploading(false);
         }
-      };
-      
-      input.click();
+        errorMessage += ' Please try again.';
+        
+        alert(errorMessage);
+      } finally {
+        clearTimeout(failsafeTimeout);
+        setIsUploading(false);
+      }
     } catch (error) {
-      console.error('Error opening file dialog:', error);
-      clearTimeout(failsafeTimeout);
+      console.error('Error in file upload process:', error);
       setIsUploading(false);
     }
   };

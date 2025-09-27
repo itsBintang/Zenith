@@ -312,10 +312,32 @@ button:focus-visible {
   border: 2px solid var(--hydra-border);
 }
 
+.ui-profile__info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .ui-profile__name {
   font-size: 16px; /* Reduced from 18px */
   font-weight: 600;
   color: var(--hydra-text-muted);
+}
+
+.ui-profile__badge {
+  background: linear-gradient(45deg, #a855f7, #ec4899);
+  color: white;
+  padding: 0.2rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  box-shadow: 0 2px 8px 0 rgba(236, 72, 153, 0.3);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  align-self: flex-start;
 }
 
 .ui-btn {
@@ -499,7 +521,9 @@ button:focus-visible {
 .ui-card--hero { position: relative; height: 200px; }
 .ui-card__hero-image { position: absolute; inset: 0; background: radial-gradient(1200px 300px at 40% 50%, #3b3c42, var(--hydra-bg)); opacity: .8; }
 .ui-card__hero-overlay { position: absolute; inset: 0; padding: 16px; display: flex; flex-direction: column; justify-content: flex-end; background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.55) 60%); }
-.ui-card__hero-title { font-size: 18px; font-weight: 700; color: #fff; margin: 0; margin-bottom: 4px; }
+.ui-card__hero-title-wrapper { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.ui-card__steam-icon { color: #fff; flex-shrink: 0; }
+.ui-card__hero-title { font-size: 18px; font-weight: 700; color: #d1d1d1; margin: 0; }
 .ui-card__hero-appid { font-size: 12px; color: var(--hydra-text-body); font-family: 'JetBrains Mono', monospace; opacity: 0.8; }
 
 /* Game Detail */

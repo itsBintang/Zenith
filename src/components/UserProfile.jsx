@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { FiUser, FiUpload, FiEdit, FiAward, FiBarChart2, FiGitMerge } from 'react-icons/fi';
+import { FaCrown } from "react-icons/fa";
 import { invoke } from '@tauri-apps/api/core';
 import LibraryGrid from './LibraryGrid';
 import EditProfileModal from './EditProfileModal';
@@ -248,7 +249,10 @@ function UserProfile() {
             <div className="profile-user-info">
               <div className="profile-user-name-badge">
                 <h1 className="profile-user-name">{profile?.name || 'User'}</h1>
-                <span className="profile-user-badge">ADMIN</span>
+                <span className="profile-user-badge">
+                  <FaCrown size={12} />
+                  ADMIN
+                </span>
               </div>
             </div>
           </div>

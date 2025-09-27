@@ -1,12 +1,13 @@
 import React from "react";
+import { FaSteam } from "react-icons/fa";
 
 // Featured games with real AppIDs
 const featuredGames = [
   
   {
-    app_id: "1174180",
-    title: "Red Dead Redemption 2",
-    header_image: "https://cdn.akamai.steamstatic.com/steam/apps/1174180/header.jpg"
+    app_id: "3405690",
+    title: "EA SPORTS FC™ 26",
+    header_image: "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3405690/2d96aa1b06e453cd62dae9029d412f19e61932c3/header.jpg?t=1758903580"
   },
   {
     app_id: "2928600",
@@ -58,7 +59,10 @@ function GameGrid({ onGameSelect }) {
               }}
             />
             <div className="ui-card__hero-overlay">
-              <h3 className="ui-card__hero-title">{game.title}</h3>
+              <div className="ui-card__hero-title-wrapper">
+                <FaSteam className="ui-card__steam-icon" size={16} />
+                <h3 className="ui-card__hero-title">{game.title}</h3>
+              </div>
             </div>
           </div>
         ))}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { FiHome, FiBox, FiSettings, FiRefreshCw, FiShield } from "react-icons/fi";
+import { FaCrown } from "react-icons/fa";
 import { invoke } from "@tauri-apps/api/core";
 import logoImage from "../../logo.jpg";
 import MyLibrary from './MyLibrary'; // Assuming MyLibrary is in the same folder
@@ -99,7 +100,13 @@ function Sidebar({ libraryState, onRefreshLibrary, onUpdateFilter, refreshProfil
             alt={profile?.name || 'User'} 
             className="ui-profile__avatar" 
           />
-          <span className="ui-profile__name">{profile?.name || 'User'}</span>
+          <div className="ui-profile__info">
+            <span className="ui-profile__name">{profile?.name || 'User'}</span>
+            <span className="ui-profile__badge">
+              <FaCrown size={10} />
+              ADMIN
+            </span>
+          </div>
         </div>
       </div>
 

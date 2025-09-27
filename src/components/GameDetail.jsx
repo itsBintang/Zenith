@@ -2,11 +2,13 @@ import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { FiArrowLeft, FiCloud, FiDownload, FiPlay, FiSettings, FiCheck, FiX, FiTrash2, FiPackage, FiRefreshCw, FiChevronDown } from "react-icons/fi";
+import { FiArrowLeft, FiCloud, FiDownload, FiPlay, FiSettings, FiCheck, FiX, FiTrash2, FiPackage, FiRefreshCw, FiChevronDown, FiMenu, FiRotateCcw } from "react-icons/fi";
 import { GameDetailSkeleton } from "./SkeletonLoader";
 import DlcManager from "./DlcManager";
 import "../styles/GameDetail.css";
 import { isTauri } from '@tauri-apps/api/core';
+import { average } from "color.js";
+import Color from "color";
 
 // Toast Notification Component
 function ToastNotification({ message, type, onClose }) {
@@ -155,6 +157,74 @@ function GameDetail() {
   const [bypassInstalled, setBypassInstalled] = useState(false);
   const [gameExecutables, setGameExecutables] = useState([]);
   const [isLaunching, setIsLaunching] = useState(false);
+
+  // Options dropdown state
+  const [showOptionsDropdown, setShowOptionsDropdown] = useState(false);
+  const [isRestartingSteam, setIsRestartingSteam] = useState(false);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('.options-dropdown-container')) {
+        setShowOptionsDropdown(false);
+      }
+    };
+
+    if (showOptionsDropdown) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [showOptionsDropdown]);
+
+  // Handle hero image load and extract color (like Hydra)
+  const handleHeroLoad = async (event) => {
+    try {
+      const heroImageUrl = event.target.src;
+      console.log('Extracting color from:', heroImageUrl);
+      
+      const output = await average(heroImageUrl, {
+        amount: 1,
+        format: "hex",
+      });
+
+      console.log('Average color output:', output);
+
+      const backgroundColor = output
+        ? new Color(output).darken(0.7).toString()
+        : "#1a1a1a";
+
+      console.log('Final background color:', backgroundColor);
+      setGameColor(backgroundColor);
+    } catch (error) {
+      console.warn('Color extraction failed:', error);
+      setGameColor("#1a1a1a");
+    }
+  };
+
+  // Handle restart Steam
+  const handleRestartSteam = async () => {
+    if (isRestartingSteam) return;
+
+    setIsRestartingSteam(true);
+    setShowOptionsDropdown(false);
+    
+    try {
+      await invoke("restart_steam");
+      
+      setNotification({
+        message: "Steam restart initiated successfully",
+        type: 'success'
+      });
+    } catch (error) {
+      console.error("Restart Steam error:", error);
+      setNotification({
+        message: `Failed to restart Steam: ${error}`,
+        type: 'error'
+      });
+    } finally {
+      setIsRestartingSteam(false);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -434,6 +504,7 @@ function GameDetail() {
             src={`https://cdn.akamai.steamstatic.com/steam/apps/${detail.app_id}/library_hero.jpg`}
             className="game-details__hero-image"
             alt={detail.name}
+            onLoad={handleHeroLoad}
             onError={(e) => {
               // Fallback to original image if CDN fails
               e.target.src = detail.header_image || detail.banner_image;
@@ -441,44 +512,46 @@ function GameDetail() {
           />
           
           <div className="game-details__hero-controls">
-            <div className="game-details__action-buttons">
-              {isInLibrary && (
-                <button 
-                  className={`game-details__update-button ${isUpdating ? 'updating' : ''}`}
-                  onClick={handleUpdateGame}
-                  disabled={isUpdating}
-                >
-                  {isUpdating ? (
-                    <>
-                      <div className="spinner"></div>
-                      Updating...
-                    </>
-                  ) : (
-                    <>
-                      <FiRefreshCw />
-                      Update
-                    </>
-                  )}
-                </button>
-              )}
-              
-              
-              {isInLibrary && (
-                <button 
-                  className="game-details__update-button"
-                  onClick={handleManageDlcs}
-                  disabled={isDownloading}
-                >
-                  <FiPackage />
-                  DLC UNLOCKER
-                </button>
-              )}
-            </div>
+            {isInLibrary && (
+              <button 
+                className={`game-details__update-button ${isUpdating ? 'updating' : ''}`}
+                onClick={handleUpdateGame}
+                disabled={isUpdating}
+              >
+                {isUpdating ? (
+                  <>
+                    <div className="spinner"></div>
+                    Update
+                  </>
+                ) : (
+                  <>
+                    <FiRefreshCw />
+                    Update
+                  </>
+                )}
+              </button>
+            )}
+            
+            {isInLibrary && (
+              <button 
+                className="game-details__dlc-button"
+                onClick={handleManageDlcs}
+                disabled={isDownloading}
+              >
+                <FiPackage />
+                DLC UNLOCKER
+              </button>
+            )}
           </div>
         </div>
 
         {/* Action Bar */}
-        <div className="game-details__action-bar">
+        <div 
+          className="game-details__action-bar"
+          style={{
+            backgroundColor: gameColor,
+          }}
+        >
             <div className="action-bar__left">
                 <p className="play-status">
                     {isInLibrary ? `You haven't played ${detail.name} yet` : `Not in library`}
@@ -506,14 +579,46 @@ function GameDetail() {
                                 {isLaunching ? "Launching..." : "Play"}
                             </button>
                         )}
-                        <button 
-                            className="hero-button hero-button--danger" 
-                            onClick={handleRemoveFromLibrary}
-                            disabled={isDownloading}
-                        >
-                            <FiTrash2 /> 
-                            {isDownloading ? "Removing..." : "Remove"}
-                        </button>
+                        <div className="options-dropdown-container">
+                            <button 
+                                className="hero-button hero-button--options" 
+                                onClick={() => setShowOptionsDropdown(!showOptionsDropdown)}
+                                disabled={isDownloading}
+                            >
+                                <FiMenu />
+                            </button>
+                            
+                            {showOptionsDropdown && (
+                                <div className="options-dropdown">
+                                    <button 
+                                        className="options-dropdown-item"
+                                        onClick={handleRestartSteam}
+                                        disabled={isRestartingSteam || isDownloading}
+                                    >
+                                        <FiRotateCcw />
+                                        {isRestartingSteam ? "Restarting..." : "Restart Steam"}
+                                    </button>
+                                    
+                                    <button 
+                                        className="options-dropdown-item"
+                                        onClick={() => setShowOptionsDropdown(false)}
+                                        disabled={isDownloading}
+                                    >
+                                        <FiCloud />
+                                        Online fix, choose the game folder..
+                                    </button>
+                                    
+                                    <button 
+                                        className="options-dropdown-item options-dropdown-item--danger"
+                                        onClick={handleRemoveFromLibrary}
+                                        disabled={isDownloading}
+                                    >
+                                        <FiTrash2 />
+                                        {isDownloading ? "Removing..." : "Remove Game"}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </>
                 )}
             </div>
