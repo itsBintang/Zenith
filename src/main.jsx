@@ -8,6 +8,7 @@ import GameDetail from "./components/GameDetail";
 import Settings from "./components/Settings";
 import UserProfile from "./components/UserProfile";
 import Bypass from "./components/Bypass";
+import DownloadManager from "./components/DownloadManager";
 import "./App.css";
 
 const router = createBrowserRouter([
@@ -18,6 +19,7 @@ const router = createBrowserRouter([
       { index: true, element: <Home /> },
       { path: "catalogue", element: <Catalogue /> },
       { path: "bypass", element: <Bypass /> },
+      { path: "downloads", element: <DownloadManager /> },
       { path: "settings", element: <Settings /> },
       { path: "profile", element: <UserProfile /> },
       { path: "game/:appId", element: <GameDetail /> },

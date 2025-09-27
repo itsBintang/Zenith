@@ -1,21 +1,25 @@
 use serde::{Deserialize, Serialize};
 use crate::steam_utils::{find_game_folder_from_acf, find_steam_installation_path};
+use crate::download::{DownloadManagerState};
+use crate::download::types::{DownloadRequest, DownloadType, DownloadStatus};
+use crate::database::history_commands::{add_download_to_history, update_download_history_completion};
 use std::fs::{self, File};
-use std::io::{self, Write};
+use std::io;
 use std::path::Path;
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::command;
-use tauri::Emitter;
+use tauri::{Emitter, Manager, State};
 use walkdir::WalkDir;
 use zip::ZipArchive;
-use crate::DOWNLOAD_CLIENT;
+use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BypassProgress {
     step: String,
     progress: f64,
     app_id: String,
+    download_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -77,12 +81,12 @@ pub async fn check_bypass_installed(app_id: &str) -> Result<bool, String> {
 }
 
 #[command]
-pub async fn install_bypass(app_id: String, manual_game_path: Option<String>, window: tauri::Window) -> Result<BypassResult, String> {
-    install_bypass_with_type(app_id, None, manual_game_path, window).await
+pub async fn install_bypass(app_id: String, manual_game_path: Option<String>, window: tauri::Window, download_state: State<'_, DownloadManagerState>) -> Result<BypassResult, String> {
+    install_bypass_with_type(app_id, None, manual_game_path, window, download_state).await
 }
 
 #[command]
-pub async fn install_bypass_with_type(app_id: String, _bypass_type: Option<u8>, manual_game_path: Option<String>, window: tauri::Window) -> Result<BypassResult, String> {
+pub async fn install_bypass_with_type(app_id: String, _bypass_type: Option<u8>, manual_game_path: Option<String>, window: tauri::Window, download_state: State<'_, DownloadManagerState>) -> Result<BypassResult, String> {
     // Check if bypass is already installed
     let is_reinstall = check_bypass_installed(&app_id).await.unwrap_or(false);
 
@@ -94,7 +98,7 @@ pub async fn install_bypass_with_type(app_id: String, _bypass_type: Option<u8>, 
     }
     println!("================================");
 
-    let emit_progress = |step: &str, progress: f64| {
+    let emit_progress = |step: &str, progress: f64, download_id: Option<String>| {
         println!("📊 Progress: {:.1}% - {}", progress, step);
         let _ = window.emit(
             "bypass_progress",
@@ -102,6 +106,7 @@ pub async fn install_bypass_with_type(app_id: String, _bypass_type: Option<u8>, 
                 step: step.to_string(),
                 progress,
                 app_id: app_id.clone(),
+                download_id,
             },
         );
     };
@@ -111,15 +116,15 @@ pub async fn install_bypass_with_type(app_id: String, _bypass_type: Option<u8>, 
     } else {
         "installation"
     };
-    emit_progress(&format!("Initializing bypass {}...", action_word), 0.0);
+    emit_progress(&format!("Initializing bypass {}...", action_word), 0.0, None);
 
     // Step 1: Detect Steam installation
-    emit_progress("Detecting Steam installation...", 10.0);
+    emit_progress("Detecting Steam installation...", 10.0, None);
     let steam_path = find_steam_installation_path()
         .map_err(|e| format!("Steam installation not found: {}", e))?;
 
     // Step 2: Validate game installation
-    emit_progress("Validating game installation...", 20.0);
+    emit_progress("Validating game installation...", 20.0, None);
     
     let game_path = if let Some(manual_path) = manual_game_path {
         println!("📁 Using manual game path: {}", manual_path);
@@ -143,30 +148,30 @@ pub async fn install_bypass_with_type(app_id: String, _bypass_type: Option<u8>, 
 
     println!("✅ Game directory validated successfully");
 
-    // Step 3: Download bypass using URL from JSON
-    emit_progress("Downloading bypass files...", 30.0);
+    // Step 3: Download bypass using aria2c
+    emit_progress("Downloading bypass files with aria2c...", 30.0, None);
     
-    let download_path = download_bypass_from_json(&window, &app_id)
+    let (download_path, download_id) = download_bypass_from_json_with_aria2(&window, &app_id, &download_state)
         .await
         .map_err(|e| {
-            println!("❌ Download completely failed: {}", e);
+            println!("❌ aria2c download completely failed: {}", e);
             format!("Failed to download bypass: {}", e)
         })?;
 
     // Step 4: Extract bypass
-    emit_progress("Extracting bypass files...", 60.0);
+    emit_progress("Extracting bypass files...", 60.0, None);
     let extract_path = extract_bypass(&download_path)
         .await
         .map_err(|e| format!("Failed to extract bypass: {}", e))?;
 
     // Step 5: Install bypass files - UNIVERSAL METHOD (pure copy structure)
-    emit_progress("Installing bypass to game directory...", 85.0);
+    emit_progress("Installing bypass to game directory...", 85.0, None);
     install_bypass_files_universal(&extract_path, &game_path)
         .await
         .map_err(|e| format!("Failed to install bypass: {}", e))?;
 
     // Step 6: Cleanup
-    emit_progress("Finalizing installation...", 95.0);
+    emit_progress("Finalizing installation...", 95.0, None);
     cleanup_temp_files(&download_path, &extract_path)?;
     println!("🧹 Cleaned up temporary files");
 
@@ -186,7 +191,7 @@ pub async fn install_bypass_with_type(app_id: String, _bypass_type: Option<u8>, 
         "Bypass installed successfully!"
     };
 
-    emit_progress(final_message, 100.0);
+    emit_progress(final_message, 100.0, None);
 
     println!("🎉 Bypass {} completed successfully!", action_word);
     println!("📁 Game directory: {}", game_path);
@@ -538,11 +543,13 @@ pub async fn launch_game_executable(executable_path: String) -> Result<String, S
 
 // ====================== BYPASS DOWNLOAD & INSTALL FUNCTIONS ======================
 
-async fn download_bypass_from_json(
+
+async fn download_bypass_from_json_with_aria2(
     window: &tauri::Window,
     app_id: &str,
-) -> Result<String, String> {
-    println!("📥 Starting bypass download using URLs from JSON");
+    download_state: &State<'_, DownloadManagerState>,
+) -> Result<(String, String), String> {
+    println!("📥 Starting bypass download using aria2c from URLs in JSON");
 
     // Get bypass game data from cache
     let bypass_game = crate::database::cache_service::SQLITE_CACHE_SERVICE
@@ -562,14 +569,14 @@ async fn download_bypass_from_json(
 
     let mut all_errors = Vec::new();
 
-    // Try each bypass URL from JSON
+    // Try each bypass URL from JSON using aria2c
     for (index, bypass) in bypass_game.bypasses.iter().enumerate() {
-        println!("🔄 Trying bypass {} of {}: {}", index + 1, bypass_game.bypasses.len(), bypass.url);
+        println!("🔄 Trying bypass {} of {} with aria2c: {}", index + 1, bypass_game.bypasses.len(), bypass.url);
 
-        match download_bypass_with_progress(&bypass.url, window, app_id).await {
-            Ok(path) => {
-                println!("✅ Download successful from bypass URL: {}", bypass.url);
-                return Ok(path);
+        match download_bypass_with_aria2(&bypass.url, window, app_id, download_state).await {
+            Ok((path, download_id)) => {
+                println!("✅ aria2c download successful from bypass URL: {}", bypass.url);
+                return Ok((path, download_id));
             }
             Err(e) => {
                 let error_msg = format!("Bypass URL {} failed: {}", bypass.url, e);
@@ -594,116 +601,220 @@ async fn download_bypass_from_json(
     ))
 }
 
-async fn download_bypass_with_progress(
+async fn download_bypass_with_aria2(
     bypass_url: &str,
     window: &tauri::Window,
     app_id: &str,
-) -> Result<String, String> {
-    println!("📥 Starting download from: {}", bypass_url);
+    download_state: &State<'_, DownloadManagerState>,
+) -> Result<(String, String), String> {
+    println!("📥 Starting aria2c download from: {}", bypass_url);
 
-    // Try download with retry mechanism
-    let mut last_error = String::new();
+    // Get download manager, initialize if needed
+    let manager_option = {
+        let manager_guard = download_state.manager.read();
+        manager_guard.clone()
+    };
 
-    for attempt in 1..=3 {
-        println!("🔄 Download attempt {} of 3", attempt);
-
-        match download_bypass_attempt(bypass_url, window, app_id, attempt).await {
-            Ok(path) => {
-                println!("✅ Download successful on attempt {}", attempt);
-                return Ok(path);
+    let manager = match manager_option {
+        Some(manager) => manager,
+        None => {
+            // Auto-initialize download manager for bypass
+            println!("🔧 Download manager not initialized, auto-initializing for bypass...");
+            
+            // Initialize download manager
+            let aria2_path = crate::download::commands::find_aria2_binary(&window.app_handle())
+                .map_err(|e| format!("Failed to find aria2 binary: {}", e))?;
+            
+            let mut new_manager = crate::download::download_manager::DownloadManager::new(aria2_path)
+                .map_err(|e| format!("Failed to create download manager: {}", e))?;
+            
+            new_manager.set_app_handle(window.app_handle().clone());
+            new_manager.initialize().await
+                .map_err(|e| format!("Failed to initialize download manager: {}", e))?;
+            
+            let manager_arc = std::sync::Arc::new(new_manager);
+            
+            // Store in state
+            {
+                let mut state_manager = download_state.manager.write();
+                *state_manager = Some(manager_arc.clone());
             }
-            Err(e) => {
-                last_error = e.clone();
-                println!("❌ Attempt {} failed: {}", attempt, e);
-
-                if attempt < 3 {
-                    println!("⏳ Waiting 3 seconds before retry...");
-                    tokio::time::sleep(Duration::from_secs(3)).await;
-                }
-            }
+            
+            println!("✅ Download manager auto-initialized successfully for bypass");
+            manager_arc
         }
-    }
+    };
 
-    Err(format!(
-        "Download failed after 3 attempts. Last error: {}",
-        last_error
-    ))
-}
-
-async fn download_bypass_attempt(
-    bypass_url: &str,
-    window: &tauri::Window,
-    app_id: &str,
-    attempt: u32,
-) -> Result<String, String> {
-    let mut response = DOWNLOAD_CLIENT
-        .get(bypass_url)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to start download: {}", e))?;
-
-    if !response.status().is_success() {
-        let error_msg = format!("Download failed with status: {}", response.status());
-        return Err(error_msg);
-    }
-
-    let total_size = response.content_length().unwrap_or(0);
-    println!(
-        "📦 Download size: {:.2} MB",
-        total_size as f64 / 1_048_576.0
-    );
-
+    // Create temp directory for bypass download
     let temp_dir = std::env::temp_dir();
-    let download_path = temp_dir.join(format!(
+    let filename = format!(
         "bypass_{}_{}_{}.zip",
         app_id,
-        attempt,
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_secs()
-    ));
+            .as_secs(),
+        Uuid::new_v4().simple()
+    );
+    
+    let download_path = temp_dir.join(&filename);
 
-    let mut file =
-        File::create(&download_path).map_err(|e| format!("Failed to create temp file: {}", e))?;
+    // Create download request
+    let download_request = DownloadRequest {
+        id: Uuid::new_v4().to_string(),
+        url: bypass_url.to_string(),
+        save_path: temp_dir.to_string_lossy().to_string(),
+        download_type: DownloadType::Http,
+        headers: None,
+        filename: Some(filename.clone()),
+        auto_extract: Some(false),
+    };
 
-    let mut downloaded = 0u64;
+    // Start download with aria2c
+    let download_id = manager.start_download(download_request)
+        .await
+        .map_err(|e| format!("Failed to start aria2c download: {}", e))?;
+
+    println!("🚀 Started aria2c download with ID: {}", download_id);
+
+    // Add to download history
+    let history_result = add_download_to_history(
+        download_id.clone(),
+        "bypass".to_string(),
+        "bypass_installation".to_string(),
+        bypass_url.to_string(),
+        download_path.to_string_lossy().to_string(),
+        Some(app_id.to_string()),
+        None, // We'll get game name later if needed
+        None, // No original request JSON for bypass
+    ).await;
+
+    if let Err(e) = history_result {
+        println!("⚠️ Failed to add download to history: {}", e);
+        // Don't fail the download, just log the error
+    } else {
+        println!("📝 Added bypass download to history");
+    }
+
+    // Monitor download progress
     let mut last_progress_time = std::time::Instant::now();
+    let mut completed = false;
 
-    println!("📊 Starting download stream (attempt {})...", attempt);
+    for _ in 0..300 { // Max 5 minutes timeout (300 * 1 second)
+        tokio::time::sleep(Duration::from_secs(1)).await;
 
-    while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
-        file.write_all(&chunk).map_err(|e| e.to_string())?;
-        downloaded += chunk.len() as u64;
-
-        // Update progress every 500ms to avoid spam
-        if last_progress_time.elapsed() >= Duration::from_millis(500) {
-            if total_size > 0 {
-                let progress = (downloaded as f64 / total_size as f64) * 30.0 + 40.0;
-                let speed_mbps =
-                    (downloaded as f64 / 1_048_576.0) / last_progress_time.elapsed().as_secs_f64();
-
-                let _ = window.emit(
-                    "bypass_progress",
-                    BypassProgress {
-                        step: format!(
-                            "Downloading... {:.1} MB / {:.1} MB ({:.1} MB/s)",
-                            downloaded as f64 / 1_048_576.0,
-                            total_size as f64 / 1_048_576.0,
+        match manager.get_download_progress(&download_id).await {
+            Ok(progress) => {
+                // Update progress every 2 seconds to avoid spam
+                if last_progress_time.elapsed() >= Duration::from_secs(2) {
+                    let bypass_progress = 30.0 + (progress.progress * 30.0); // 30% to 60% of total progress
+                    
+                    let speed_mbps = progress.download_speed as f64 / 1_048_576.0;
+                    let step_message = if progress.total_size > 0 {
+                        format!(
+                            "Downloading with aria2c... {:.1} MB / {:.1} MB ({:.1} MB/s)",
+                            progress.downloaded_size as f64 / 1_048_576.0,
+                            progress.total_size as f64 / 1_048_576.0,
                             speed_mbps
-                        ),
-                        progress,
-                        app_id: app_id.to_string(),
-                    },
-                );
+                        )
+                    } else {
+                        format!(
+                            "Downloading with aria2c... {:.1} MB ({:.1} MB/s)",
+                            progress.downloaded_size as f64 / 1_048_576.0,
+                            speed_mbps
+                        )
+                    };
+
+                    let _ = window.emit(
+                        "bypass_progress",
+                        BypassProgress {
+                            step: step_message,
+                            progress: bypass_progress,
+                            app_id: app_id.to_string(),
+                            download_id: Some(download_id.clone()),
+                        },
+                    );
+
+                    last_progress_time = std::time::Instant::now();
+                }
+
+                match progress.status {
+                    DownloadStatus::Completed => {
+                        completed = true;
+                        break;
+                    }
+                    DownloadStatus::Error => {
+                        return Err("Download failed with error status".to_string());
+                    }
+                    DownloadStatus::Cancelled => {
+                        return Err("Download was cancelled".to_string());
+                    }
+                    _ => {
+                        // Continue monitoring
+                    }
+                }
             }
-            last_progress_time = std::time::Instant::now();
+            Err(e) => {
+                println!("⚠️ Failed to get progress: {}", e);
+                // Continue trying, maybe download isn't started yet
+            }
         }
     }
 
-    println!("✅ Download completed: {}", download_path.display());
-    Ok(download_path.to_string_lossy().to_string())
+    if !completed {
+        // Update history as cancelled/failed
+        let _ = update_download_history_completion(
+            download_id.clone(),
+            "failed".to_string(),
+            0.0,
+            0,
+            300, // 5 minutes timeout
+            None,
+            Some("Download timeout after 5 minutes".to_string()),
+        ).await;
+        
+        // Cleanup incomplete download
+        let _ = manager.cancel_download(&download_id).await;
+        return Err("Download timeout after 5 minutes".to_string());
+    }
+
+    // Verify file exists
+    if !download_path.exists() {
+        // Update history as failed
+        let _ = update_download_history_completion(
+            download_id.clone(),
+            "failed".to_string(),
+            0.9, // Almost complete but file missing
+            0,
+            300,
+            None,
+            Some("Download completed but file not found".to_string()),
+        ).await;
+        
+        return Err(format!("Download completed but file not found: {}", download_path.display()));
+    }
+
+    // Get file size for history
+    let file_size = std::fs::metadata(&download_path)
+        .map(|m| m.len() as i64)
+        .unwrap_or(0);
+
+    // Update history as completed
+    let _ = update_download_history_completion(
+        download_id.clone(),
+        "completed".to_string(),
+        1.0, // 100% complete
+        0,   // We don't track speed in bypass currently
+        300, // Approximate time - could be improved
+        Some(file_size),
+        None,
+    ).await;
+
+    println!("✅ aria2c download completed: {}", download_path.display());
+    println!("📝 Updated download history as completed");
+    Ok((download_path.to_string_lossy().to_string(), download_id))
 }
+
 
 async fn extract_bypass(zip_path: &str) -> Result<String, String> {
     println!("📂 Extracting bypass files from: {}", zip_path);

@@ -7,8 +7,10 @@ mod models;
 mod bypass;
 mod steam_utils;
 mod steamui;
+mod download;
 
 use crate::steam_utils::{find_steam_config_path, find_steam_executable_path, update_lua_files};
+use crate::download::{DownloadManagerState};
 use futures::stream::{self, StreamExt};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -2276,6 +2278,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(DownloadManagerState::new())
         .setup(|_app| {
             // Database initialization moved to initialize_app function
             // to provide proper loading screen feedback
@@ -2347,6 +2350,27 @@ fn main() {
             // SteamUI API commands
             steamui::fetch_steamui_games,
             steamui::search_steamui_games,
+            // Download Manager Commands
+            download::initialize_download_manager,
+            download::shutdown_download_manager,
+            download::start_download,
+            download::pause_download,
+            download::resume_download,
+            download::cancel_download,
+            download::get_download_progress,
+            download::get_all_downloads,
+            download::get_active_downloads,
+            download::is_download_manager_ready,
+            download::detect_url_type,
+            // Download History Commands
+            database::history_commands::get_download_history,
+            database::history_commands::get_download_history_stats,
+            database::history_commands::search_download_history,
+            database::history_commands::get_download_history_entry,
+            database::history_commands::delete_download_history_entry,
+            database::history_commands::clear_download_history,
+            database::history_commands::redownload_from_history,
+            database::history_commands::debug_history_database,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

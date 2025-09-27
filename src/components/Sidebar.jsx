@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { FiHome, FiBox, FiSettings, FiRefreshCw, FiShield } from "react-icons/fi";
+import { FiHome, FiBox, FiSettings, FiRefreshCw, FiShield, FiDownload } from "react-icons/fi";
 import { FaCrown } from "react-icons/fa";
 import { invoke } from "@tauri-apps/api/core";
 import logoImage from "../../logo.jpg";
@@ -125,6 +125,10 @@ function Sidebar({ libraryState, onRefreshLibrary, onUpdateFilter, refreshProfil
           <NavLink to="/bypass" className={({ isActive }) => `ui-nav-item ${isActive ? "ui-nav-item--active" : ""}`}>
             <FiShield size={18} />
             <span>Bypass</span>
+          </NavLink>
+          <NavLink to="/downloads" className={({ isActive }) => `ui-nav-item ${isActive ? "ui-nav-item--active" : ""}`}>
+            <FiDownload size={18} />
+            <span>Downloads</span>
           </NavLink>
           <NavLink to="/settings" className={({ isActive }) => `ui-nav-item ${isActive ? "ui-nav-item--active" : ""}`}>
             <FiSettings size={18} />

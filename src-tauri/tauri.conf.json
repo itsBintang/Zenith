@@ -13,7 +13,7 @@
                    "copyright":  "",
                    "targets":  "all",
                    "externalBin":  [
-
+                                       
                                    ],
                    "icon":  [
                                 "icons/32x32.png",
@@ -38,7 +38,7 @@
                                  "signingIdentity":  null
                              },
                      "resources":  [
-
+                                   "binaries/aria2c.exe"
                                ],
                    "shortDescription":  "Modern Steam game launcher",
                    "linux":  {

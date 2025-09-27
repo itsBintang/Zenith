@@ -68,6 +68,8 @@ function Bypass() {
   const [bypassProgress, setBypassProgress] = useState({ step: '', progress: 0, app_id: null });
   const [showBypassConfirmation, setShowBypassConfirmation] = useState(false);
   const [selectedGame, setSelectedGame] = useState(null);
+  const [currentDownloadId, setCurrentDownloadId] = useState(null);
+  const [downloadPaused, setDownloadPaused] = useState(false);
   const [showLaunchPopup, setShowLaunchPopup] = useState(false);
   const [gameExecutablePath, setGameExecutablePath] = useState(null);
   const [gameExecutables, setGameExecutables] = useState([]);
@@ -107,10 +109,38 @@ function Bypass() {
       try {
         const isRunningInTauri = await isTauri();
         if (isRunningInTauri) {
-          unlistenFn = await listen('bypass_progress', (event) => {
-            const progress = event.payload;
-            setBypassProgress(progress);
-          });
+        unlistenFn = await listen('bypass_progress', (event) => {
+          const progress = event.payload;
+          setBypassProgress(progress);
+          
+          // Capture download ID when available
+          if (progress.download_id && !currentDownloadId) {
+            setCurrentDownloadId(progress.download_id);
+          }
+          
+          // Handle completion (100% progress)
+          if (progress.progress >= 100) {
+            console.log('🎉 Bypass installation completed!');
+            setShowBypassProgress(false);
+            setShowBypassConfirmation(false);
+            setCurrentDownloadId(null);
+            setDownloadPaused(false);
+            
+            // Update bypass status to installed
+            if (progress.app_id) {
+              setBypassStatus(prev => ({ 
+                ...prev, 
+                [progress.app_id]: { installed: true, installing: false }
+              }));
+            }
+            
+            // Show success notification
+            setNotification({
+              message: `Bypass activation completed successfully!`,
+              type: 'success'
+            });
+          }
+        });
         }
       } catch (error) {
         console.error('Failed to setup bypass progress listener:', error);
@@ -371,6 +401,66 @@ function Bypass() {
       setSelectedGame(null);
     } finally {
       setShowBypassProgress(false);
+      setCurrentDownloadId(null);
+      setDownloadPaused(false);
+    }
+  };
+
+  const handlePauseDownload = async () => {
+    if (!currentDownloadId) return;
+    
+    try {
+      if (downloadPaused) {
+        // Resume download
+        await invoke('resume_download', { downloadId: currentDownloadId });
+        setDownloadPaused(false);
+        setNotification({
+          message: 'Download resumed',
+          type: 'success'
+        });
+      } else {
+        // Pause download
+        await invoke('pause_download', { downloadId: currentDownloadId });
+        setDownloadPaused(true);
+        setNotification({
+          message: 'Download paused',
+          type: 'success'
+        });
+      }
+    } catch (error) {
+      console.error('Failed to pause/resume download:', error);
+      setNotification({
+        message: `Failed to ${downloadPaused ? 'resume' : 'pause'} download: ${error}`,
+        type: 'error'
+      });
+    }
+  };
+
+  const handleCancelDownload = async () => {
+    if (!currentDownloadId) return;
+    
+    try {
+      await invoke('cancel_download', { downloadId: currentDownloadId });
+      
+      // Reset states
+      setShowBypassProgress(false);
+      setCurrentDownloadId(null);
+      setDownloadPaused(false);
+      setBypassStatus(prev => ({ 
+        ...prev, 
+        [selectedGame.appId]: { ...prev[selectedGame.appId], installing: false }
+      }));
+      
+      setNotification({
+        message: 'Download cancelled',
+        type: 'success'
+      });
+    } catch (error) {
+      console.error('Failed to cancel download:', error);
+      setNotification({
+        message: `Failed to cancel download: ${error}`,
+        type: 'error'
+      });
     }
   };
 
@@ -577,7 +667,39 @@ function Bypass() {
                               {bypassProgress.progress >= 60 ? <FiCheck size={16} /> : 
                                bypassProgress.progress >= 30 ? <div className="spinner-small"></div> : '4'}
                             </div>
-                            <span className="step-label">Downloading Bypass</span>
+                            <div className="step-content">
+                              <span className="step-label">Downloading Bypass</span>
+                              {/* Progress Details for Download Step */}
+                              {bypassProgress.progress >= 30 && bypassProgress.progress < 60 && bypassProgress.step && (
+                                <div className="download-progress-details">
+                                  <div className="download-progress-bar">
+                                    <div 
+                                      className="download-progress-fill" 
+                                      style={{ width: `${Math.max(5, ((bypassProgress.progress - 30) / 30) * 100)}%` }}
+                                    ></div>
+                                  </div>
+                                  <div className="download-info">
+                                    <span className="download-status">{bypassProgress.step}</span>
+                                    <div className="download-controls">
+                                      <button 
+                                        className={`download-control-btn pause ${downloadPaused ? 'paused' : ''}`}
+                                        onClick={handlePauseDownload}
+                                        title={downloadPaused ? "Resume Download" : "Pause Download"}
+                                      >
+                                        {downloadPaused ? '▶️' : '⏸️'}
+                                      </button>
+                                      <button 
+                                        className="download-control-btn cancel"
+                                        onClick={handleCancelDownload}
+                                        title="Cancel Download"
+                                      >
+                                        ❌
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           </div>
 
                           {/* Step 5: Extracting Files */}

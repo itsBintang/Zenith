@@ -2,7 +2,7 @@ use anyhow::Result;
 use rusqlite::Connection;
 
 /// Current database schema version
-const CURRENT_SCHEMA_VERSION: i32 = 6;
+const CURRENT_SCHEMA_VERSION: i32 = 7;
 
 /// Run all necessary database migrations
 pub fn run_migrations(conn: &Connection) -> Result<()> {
@@ -70,6 +70,7 @@ fn migrate_to_version(conn: &Connection, version: i32) -> Result<()> {
         4 => migrate_to_v4(conn),
         5 => migrate_to_v5(conn),
         6 => migrate_to_v6(conn),
+        7 => migrate_to_v7(conn),
         _ => Err(anyhow::anyhow!("Unknown migration version: {}", version)),
     }
 }
@@ -559,5 +560,30 @@ fn migrate_to_v6(conn: &Connection) -> Result<()> {
     }
     
     println!("Bio column removal migration completed successfully");
+    Ok(())
+}
+
+/// Migration to version 7: Add download history table
+fn migrate_to_v7(conn: &Connection) -> Result<()> {
+    println!("Adding download history table (v7)...");
+    
+    // Check if download_history table already exists
+    let table_exists: bool = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='download_history'",
+        [],
+        |row| Ok(row.get::<_, i32>(0)? > 0)
+    )?;
+    
+    if !table_exists {
+        // Read and execute the history schema SQL
+        let history_schema = include_str!("history_schema.sql");
+        conn.execute_batch(history_schema)?;
+        
+        println!("Download history table created successfully");
+    } else {
+        println!("Download history table already exists, skipping creation");
+    }
+    
+    println!("Download history migration completed successfully");
     Ok(())
 }
