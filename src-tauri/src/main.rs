@@ -6,8 +6,9 @@ mod database;
 mod models;
 mod bypass;
 mod steam_utils;
-mod steamui;
 mod download;
+mod hydra_api;
+mod catalogue_commands;
 
 use crate::steam_utils::{find_steam_config_path, find_steam_executable_path, update_lua_files};
 use crate::download::{DownloadManagerState};
@@ -38,185 +39,8 @@ fn sanitize_filename(name: &str) -> String {
     out
 }
 
-async fn search_steam_store(query: &str, limit: u32) -> Result<Vec<SearchResultItem>, String> {
-    let url = format!(
-        "https://store.steampowered.com/api/storesearch/?term={}&l=english&cc=US",
-        urlencoding::encode(query)
-    );
 
-    let response = HTTP_CLIENT
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to fetch search results: {}", e))?;
 
-    if !response.status().is_success() {
-        return Err(format!("Steam API returned status: {}", response.status()));
-    }
-
-    let text = response.text().await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
-
-    let json: serde_json::Value = serde_json::from_str(&text)
-        .map_err(|e| format!("Failed to parse JSON: {}", e))?;
-
-    let items = json["items"]
-        .as_array()
-        .ok_or("No items found in response")?;
-
-    let mut results = Vec::new();
-    for item in items.iter().take(limit as usize) {
-        if let (Some(id), Some(name), Some(img), Some(item_type)) = (
-            item["id"].as_u64(),
-            item["name"].as_str(),
-            item["tiny_image"].as_str(),
-            item["type"].as_str(),
-        ) {
-            // Filter out non-game items (DLC, soundtracks, etc.)
-            if !is_valid_game_item(name, item_type) {
-                continue;
-            }
-            
-            results.push(SearchResultItem {
-                app_id: id.to_string(),
-                name: name.to_string(),
-                header_image: img.replace("capsule_sm_120", "header"),
-                source: "api".to_string(),
-            });
-        }
-    }
-
-    Ok(results)
-}
-
-#[command]
-async fn search_games_hybrid(query: String, use_catalogue: bool, limit: Option<u32>) -> Result<Vec<SearchResultItem>, String> {
-    let search_limit = limit.unwrap_or(20);
-    let mut results = Vec::new();
-
-    // If use_catalogue is true, try to search in catalogue data first
-    if use_catalogue {
-        // Parse CSV from GitHub repository
-        let csv_url = "https://raw.githubusercontent.com/itsBintang/SteamDB/main/steamdb.csv";
-        
-        match HTTP_CLIENT.get(csv_url).send().await {
-            Ok(response) if response.status().is_success() => {
-                if let Ok(text) = response.text().await {
-                    // Parse CSV and search
-                    let mut csv_results = Vec::new();
-                    let mut rdr = csv::Reader::from_reader(text.as_bytes());
-                    
-                    for result in rdr.records() {
-                        if let Ok(record) = result {
-                            if record.len() >= 4 {
-                                let name = record.get(3).unwrap_or("").to_string();
-                                let app_href = record.get(1).unwrap_or("");
-                                let image_url = record.get(2).unwrap_or("").to_string();
-                                
-                                // Extract app_id from href
-                                if let Some(app_id) = extract_appid_from_url(app_href) {
-                                    // Check if name contains query (case insensitive)
-                                    if name.to_lowercase().contains(&query.to_lowercase()) {
-                                        csv_results.push(SearchResultItem {
-                                            app_id,
-                                            name,
-                                            header_image: image_url,
-                                            source: "catalogue".to_string(),
-                                        });
-                                        
-                                        if csv_results.len() >= search_limit as usize {
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    results.extend(csv_results);
-                }
-            }
-            _ => {
-                // If catalogue fails, continue to API fallback
-            }
-        }
-    }
-
-    // If no results from catalogue or not using catalogue, fallback to Steam API
-    if results.is_empty() {
-        match search_steam_store(&query, search_limit).await {
-            Ok(api_results) => {
-                results.extend(api_results);
-            }
-            Err(e) => {
-                return Err(format!("Both catalogue and API search failed. API error: {}", e));
-            }
-        }
-    }
-
-    Ok(results)
-}
-
-fn extract_appid_from_url(url: &str) -> Option<String> {
-    // Extract app ID from URLs like "https://steamdb.info/app/578080/charts/"
-    if let Some(captures) = regex::Regex::new(r"/app/(\d+)/").unwrap().captures(url) {
-        if let Some(app_id) = captures.get(1) {
-            return Some(app_id.as_str().to_string());
-        }
-    }
-    None
-}
-
-fn is_valid_game_item(name: &str, item_type: &str) -> bool {
-    // Filter out non-game item types
-    if item_type != "app" {
-        return false;
-    }
-    
-    let name_lower = name.to_lowercase();
-    
-    // Filter out common DLC/addon patterns
-    let excluded_patterns = [
-        "dlc", "downloadable content", "expansion pack", "season pass",
-        "soundtrack", "ost", "original soundtrack", "music",
-        "artbook", "art book", "sketchbook", "wallpaper", "avatar", "emoticon",
-        "trading card", "badge", "profile background",
-        "demo", "beta", "test", "benchmark",
-        "tool", "sdk", "editor", "mod",
-        "- soundtrack", "- ost", "- music",
-        "supporter pack", "cosmetic pack", "skin pack",
-        "character pack", "weapon pack", "map pack",
-        "content pack", "bonus content", "digital deluxe",
-        "collector's edition upgrade", "upgrade pack",
-        "companion app", "mobile companion", "viewer",
-        "prologue", "prelude", "epilogue", "chapter",
-        "free content", "free dlc", "update", "starter pack"
-    ];
-    
-    // Check if name contains any excluded patterns
-    for pattern in &excluded_patterns {
-        if name_lower.contains(pattern) {
-            return false;
-        }
-    }
-    
-    // Additional checks for common DLC naming patterns
-    if name_lower.contains(" - ") && (
-        name_lower.contains("pack") ||
-        name_lower.contains("bundle") ||
-        name_lower.contains("edition") ||
-        name_lower.contains("content")
-    ) {
-        // Allow some exceptions like "Game - Complete Edition" which might be the main game
-        if !name_lower.contains("complete") && !name_lower.contains("definitive") && 
-           !name_lower.contains("ultimate") && !name_lower.contains("goty") &&
-           !name_lower.contains("game of the year") {
-            return false;
-        }
-    }
-    
-    true
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct DownloadResult {
@@ -256,13 +80,6 @@ struct GameInfo {
     name: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct SearchResultItem {
-    app_id: String,
-    name: String,
-    header_image: String,
-    source: String, // "catalogue" or "api"
-}
 
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -573,22 +390,9 @@ async fn initialize_app(_app: tauri::AppHandle) -> Result<Vec<InitProgress>, Str
         }
     }
 
-    // Step 2: Initialize catalogue database
+    // Step 2: Database ready
     progress_steps.push(InitProgress {
-        step: "Initializing game catalogue database...".to_string(),
-        progress: 25.0,
-        completed: false,
-    });
-
-    progress_steps.push(InitProgress {
-        step: "Downloading game catalogue data (this may take a moment)...".to_string(),
-        progress: 30.0,
-        completed: false,
-    });
-
-    // Catalogue system removed - will use SteamSpy API instead
-    progress_steps.push(InitProgress {
-        step: "Game catalogue ready (SteamSpy API)".to_string(),
+        step: "Database initialization complete".to_string(),
         progress: 45.0,
         completed: true,
     });
@@ -2301,7 +2105,6 @@ fn main() {
             refresh_dlc_cache,
             refresh_cache_background,
             remove_game,
-            search_games_hybrid,
             commands::update_game_files,
             // Bypass Commands
             bypass::install_bypass,
@@ -2347,9 +2150,6 @@ fn main() {
             commands::get_steam_path,
             commands::set_steam_path,
             commands::detect_steam_path,
-            // SteamUI API commands
-            steamui::fetch_steamui_games,
-            steamui::search_steamui_games,
             // Download Manager Commands
             download::initialize_download_manager,
             download::shutdown_download_manager,
@@ -2371,6 +2171,12 @@ fn main() {
             database::history_commands::clear_download_history,
             database::history_commands::redownload_from_history,
             database::history_commands::debug_history_database,
+            // Catalogue Commands (Hydra API)
+            catalogue_commands::get_catalogue_list,
+            catalogue_commands::get_paginated_catalogue,
+            catalogue_commands::search_catalogue_games,
+            catalogue_commands::get_sample_catalogue_games,
+            catalogue_commands::test_hydra_connection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

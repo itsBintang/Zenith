@@ -76,7 +76,7 @@ function Header({ globalSearchQuery, setGlobalSearchQuery }) {
         return;
       }
       
-      // For name search, navigate to catalogue with URL parameters
+      // For text search, navigate to catalogue with search parameter
       if (query) {
         const searchParams = new URLSearchParams();
         searchParams.set('search', query);
